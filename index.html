@@ -1,31 +1,1821 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบให้คะแนนสอบสัมภาษณ์ สภาวิชาชีพสังคมสงเคราะห์</title> <link rel="icon" type="image/png" href="https://img2.pic.in.th/11zon_cropped64394d296c77733a.png">
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            overflow: hidden; /* ซ่อน Scrollbar ของหน้าหลัก */
-        }
-        iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบให้คะแนนสอบสัมภาษณ์</title><link rel="icon" type="image/png" href="https://img5.pic.in.th/file/secure-sv1/11zon_croppedd1b500c8230d553c.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; }
+    /* Loading Spinner */
+    .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    @media print {
+      body { background-color: white; }
+      .print-hide { display: none !important; }
+      .print-show { display: block !important; }
+    }
+  </style>
 </head>
 <body>
+  <div id="root"></div>
 
-    <iframe src="https://script.google.com/macros/s/AKfycbzh8IcQXvtRK57X0aa_qk7RZ8dDcgr-KYM751KXTarHFdiqokhorhkQSJXqoM4LhhfD/exec">
-        เบราว์เซอร์ของคุณไม่รองรับการแสดงผล iframe
-    </iframe>
+  <!--
+    ============================================================
+    ตั้งค่า URL ของ Google Apps Script Web App (JSON API) ที่นี่
+    วิธีหา URL: เปิดโปรเจกต์ Apps Script -> Deploy -> New deployment
+      -> Type: Web app -> Execute as: Me -> Who has access: Anyone
+      -> Deploy -> คัดลอก URL ที่ลงท้ายด้วย /exec มาใส่ด้านล่างนี้
+    ============================================================
+  -->
+  <script>
+    window.API_BASE_URL = "https://script.google.com/macros/s/AKfycbzh8IcQXvtRK57X0aa_qk7RZ8dDcgr-KYM751KXTarHFdiqokhorhkQSJXqoM4LhhfD/exec";
+  </script>
 
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+    const API_BASE_URL = window.API_BASE_URL;
+
+    // --- ICONS (SVG) ---
+    const Icons = {
+      LogOut: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
+      Clock: ({className="w-4 h-4"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      CheckCircle: ({className="w-4 h-4"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      FileText: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+      Settings: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+      Printer: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>,
+      Trash: ({className="w-4 h-4"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+      Plus: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+      Upload: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+      ArrowLeft: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>,
+      Users: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+      CheckBadge: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+      XBadge: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      EyeOff: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0a10.05 10.05 0 015.71-1.583c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>,
+      Download: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+      Lock: ({className="w-5 h-5"}) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+    };
+
+    // --- ฟังก์ชันจัดรูปแบบวันที่แบบปลอดภัย ---
+    function formatDateSafe(dateStr) {
+      if (!dateStr || dateStr === '') return 'ยังไม่ได้ระบุวันที่';
+      const str = String(dateStr).trim();
+      if (str.includes('วัน')) return str; 
+      
+      try {
+        let year, month, day, dateObj;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+          const parts = str.split('-');
+          year = parseInt(parts[0]);
+          month = parseInt(parts[1]) - 1;
+          day = parseInt(parts[2]);
+          dateObj = new Date(year, month, day); 
+        } else {
+          dateObj = new Date(str);
+          if (isNaN(dateObj.getTime())) return str;
+          year = dateObj.getFullYear();
+          month = dateObj.getMonth();
+          day = dateObj.getDate();
+        }
+        
+        const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+        const thaiDays = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
+        return `${thaiDays[dateObj.getDay()]}ที่ ${day} ${thaiMonths[month]} พ.ศ. ${year + 543}`;
+      } catch (e) {
+        return str;
+      }
+    }
+
+    // --- ฟังก์ชันแปลงวันที่ไทยเป็นรูปแบบ ISO (YYYY-MM-DD) สำหรับ Date Picker ---
+    function parseThaiDateToISO(dateStr) {
+      if (!dateStr) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+      
+      const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+      
+      let year = -1;
+      const yearMatch = String(dateStr).match(/\d{4}/);
+      if (yearMatch) {
+        year = parseInt(yearMatch[0]);
+        if (year > 2500) year -= 543;
+      }
+
+      let day = -1;
+      const dayMatch = String(dateStr).match(/(?:ที่\s*)?(\d{1,2})\s/); 
+      if(dayMatch) {
+          day = parseInt(dayMatch[1]);
+      } else {
+          const simpleDayMatch = String(dateStr).match(/\d{1,2}/);
+          if (simpleDayMatch) day = parseInt(simpleDayMatch[0]);
+      }
+
+      let monthIndex = -1;
+      for (let i = 0; i < thaiMonths.length; i++) {
+        if (String(dateStr).includes(thaiMonths[i])) {
+          monthIndex = i;
+          break;
+        }
+      }
+
+      if (year > 0 && monthIndex >= 0 && day > 0) {
+        const mm = String(monthIndex + 1).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${year}-${mm}-${dd}`;
+      }
+
+      return '';
+    }
+
+    function formatSessionId(id) {
+      return `SWPC${String(id).padStart(3, '0')}`;
+    }
+
+    // --- Helper Definitions for Scoring ---
+    const RANGES_30 = {
+      excellent: { min: 21, max: 30, label: 'ดีมาก', c: 'green' },
+      good: { min: 11, max: 20, label: 'ดี', c: 'amber' },
+      fair: { min: 0, max: 10, label: 'พอใช้', c: 'red' }
+    };
+
+    const getLevelFromScore30 = (score) => {
+      if (score === '' || score === null || score === undefined) return '';
+      const num = Number(score);
+      if (num >= 21 && num <= 30) return 'excellent';
+      if (num >= 11 && num <= 20) return 'good';
+      if (num >= 0 && num <= 10) return 'fair';
+      return '';
+    };
+
+    const RANGES_20 = {
+      excellent: { min: 15, max: 20, label: 'ดีมาก', c: 'green' },
+      good: { min: 7, max: 14, label: 'ดี', c: 'amber' },
+      fair: { min: 0, max: 6, label: 'พอใช้', c: 'red' }
+    };
+
+    const getLevelFromScore20 = (score) => {
+      if (score === '' || score === null || score === undefined) return '';
+      const num = Number(score);
+      if (num >= 15 && num <= 20) return 'excellent';
+      if (num >= 7 && num <= 14) return 'good';
+      if (num >= 0 && num <= 6) return 'fair';
+      return '';
+    };
+
+    // --- Helper: เรียก Google Apps Script JSON API ผ่าน fetch (แทน google.script.run) ---
+    // ใช้ POST + Content-Type: text/plain เพื่อเลี่ยง CORS preflight (Apps Script ตอบ preflight ไม่ได้)
+    // ฝั่งเซิร์ฟเวอร์จะ parse เนื้อหาเป็น JSON เองโดยไม่สนใจ header นี้
+    async function callServer(fnName, ...args) {
+      if (!API_BASE_URL || API_BASE_URL.indexOf('YOUR_DEPLOYMENT_ID') > -1) {
+        return { success: false, message: 'ยังไม่ได้ตั้งค่า API_BASE_URL กรุณาใส่ URL ของ Apps Script Web App ในไฟล์ index.html' };
+      }
+      try {
+        const res = await fetch(API_BASE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: fnName, params: args })
+        });
+        if (!res.ok) return { success: false, message: `เซิร์ฟเวอร์ตอบกลับผิดพลาด (HTTP ${res.status})` };
+        return await res.json();
+      } catch (err) {
+        return { success: false, message: 'เชื่อมต่อ API ไม่สำเร็จ: ' + (err.message || err.toString()) };
+      }
+    }
+
+    // ดึงข้อมูลรอบสอบทั้งหมด (อ่านอย่างเดียว, สาธารณะ) ผ่าน GET
+    async function fetchInitialData() {
+      if (!API_BASE_URL || API_BASE_URL.indexOf('YOUR_DEPLOYMENT_ID') > -1) {
+        return { success: false, message: 'ยังไม่ได้ตั้งค่า API_BASE_URL กรุณาใส่ URL ของ Apps Script Web App ในไฟล์ index.html' };
+      }
+      try {
+        const res = await fetch(`${API_BASE_URL}?action=getInitialData`, { method: 'GET' });
+        if (!res.ok) return { success: false, message: `เซิร์ฟเวอร์ตอบกลับผิดพลาด (HTTP ${res.status})` };
+        return await res.json();
+      } catch (err) {
+        return { success: false, message: 'เชื่อมต่อ API ไม่สำเร็จ: ' + (err.message || err.toString()) };
+      }
+    }
+
+    function getSessionStats(candidates) {
+      const total = candidates.length;
+      let passed = 0;
+      let failed = 0;
+      let pending = 0;
+
+      candidates.forEach(c => {
+         const s1 = c.scores?.inv1?.total;
+         const s2 = c.scores?.inv2?.total;
+         if (s1 != null && s2 != null) {
+            if ((Number(s1) + Number(s2)) / 2 >= 60) passed++;
+            else failed++;
+         } else {
+            pending++;
+         }
+      });
+
+      const passedPct = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
+      const failedPct = total > 0 ? ((failed / total) * 100).toFixed(1) : 0;
+
+      return { total, passed, failed, pending, passedPct, failedPct };
+    }
+
+    function App() {
+      const [sessions, setSessions] = useState([]);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [selectedCandidate, setSelectedCandidate] = useState(null);
+      const [printData, setPrintData] = useState(null); 
+      const [isFetching, setIsFetching] = useState(true);
+      const [fetchError, setFetchError] = useState(null);
+      const [isRefreshing, setIsRefreshing] = useState(false);
+
+      const loadData = (silent = false) => {
+        if (!silent) { setIsFetching(true); setFetchError(null); } else { setIsRefreshing(true); }
+
+        fetchInitialData()
+          .then((res) => {
+            if (res.success) {
+              setSessions(res.sessions || []);
+              setFetchError(null);
+            } else {
+              console.error("Backend Error:", res.message);
+              setFetchError(res.message || 'ไม่ทราบสาเหตุ');
+            }
+          })
+          .catch((err) => {
+            console.error("Error fetching data", err);
+            setFetchError((err && err.message) || 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ');
+          })
+          .finally(() => {
+            setIsFetching(false);
+            setIsRefreshing(false);
+          });
+      };
+
+      useEffect(() => { loadData(false); }, []);
+
+      // รีเฟรชข้อมูลอัตโนมัติเงียบๆ ทุก 60 วินาที เพื่อให้เห็นข้อมูลล่าสุดระหว่างวันสอบ
+      useEffect(() => {
+        const timer = setInterval(() => { if (!isFetching) loadData(true); }, 60000);
+        return () => clearInterval(timer);
+      }, [isFetching]);
+
+      const handleLogin = (userObj) => setCurrentUser(userObj);
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+        setSelectedCandidate(null);
+        setPrintData(null);
+      };
+
+      const handleSaveScore = async (candidateId, scoreData, remark) => {
+        const res = await callServer('interviewerSaveScore', currentUser.token, currentUser.sessionId, currentUser.groupId, candidateId, scoreData, remark);
+        if (!res || !res.success) {
+          if (res && /เซสชันหมดอายุ|ไม่ได้รับอนุญาต/.test(res.message || '')) {
+            Swal.fire({ icon: 'warning', title: 'เซสชันหมดอายุ', text: 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง' }).then(handleLogout);
+          }
+          throw new Error((res && res.message) || 'บันทึกไม่สำเร็จ');
+        }
+        const updatedCandidate = res.candidate || {
+          id: candidateId,
+          scores: { [currentUser.invSlot]: { ...scoreData, total: Number(scoreData.skill) + Number(scoreData.attitude) + Number(scoreData.writing) + Number(scoreData.presentation) } },
+          remarks: { [currentUser.invSlot]: remark }
+        };
+        setSessions(prev => prev.map(s => {
+          if (s.id !== currentUser.sessionId) return s;
+          return { ...s, candidates: s.candidates.map(c => c.id === candidateId ? { ...c, ...updatedCandidate } : c) };
+        }));
+        setSelectedCandidate(null);
+        return "บันทึกคะแนนและซิงค์ลง Sheet สำเร็จ";
+      };
+
+      if (isFetching) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
+            <div className="loader mb-4 !border-t-blue-400 !w-12 !h-12 !border-4"></div>
+            <h2 className="text-xl font-bold font-sans">กำลังเชื่อมต่อฐานข้อมูล...</h2>
+            <p className="text-slate-400 text-sm mt-2 font-sans">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลล่าสุด</p>
+          </div>
+        );
+      }
+
+      if (fetchError) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
+            <div className="w-16 h-16 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mb-4"><Icons.XBadge className="w-8 h-8" /></div>
+            <h2 className="text-xl font-bold font-sans">ดึงข้อมูลไม่สำเร็จ</h2>
+            <p className="text-slate-400 text-sm mt-2 font-sans max-w-md">{fetchError}</p>
+            <button onClick={() => loadData(false)} className="mt-6 bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-lg font-medium text-sm transition-colors">ลองใหม่อีกครั้ง</button>
+          </div>
+        );
+      }
+
+      if (printData) return <PrintableScoreSheet data={printData} onClose={() => setPrintData(null)} />;
+      if (!currentUser) return <LoginScreen onLogin={handleLogin} sessions={sessions} />;
+
+      if (currentUser.role === 'admin') {
+         return (
+            <div className="min-h-screen flex flex-col bg-slate-50">
+              <NavBar user={currentUser} onLogout={handleLogout} onRefresh={() => loadData(true)} isRefreshing={isRefreshing} />
+              <div className="max-w-6xl w-full mx-auto p-4 sm:p-6 flex-grow">
+                <AdminController sessions={sessions} setSessions={setSessions} onPrint={setPrintData} token={currentUser.token} reload={() => loadData(true)} />
+              </div>
+              <AppFooter />
+            </div>
+         );
+      }
+
+      const activeSession = sessions.find(s => s.id === currentUser.sessionId);
+      if (!activeSession) {
+        return (
+          <div className="p-8 text-center">
+            ไม่พบรอบสอบ กรุณาเข้าสู่ระบบใหม่ 
+            <button onClick={handleLogout} className="text-blue-500 underline ml-2">ออก</button>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-50">
+          <NavBar user={currentUser} onLogout={handleLogout} onRefresh={() => loadData(true)} isRefreshing={isRefreshing} />
+          <div className="max-w-6xl w-full mx-auto p-4 sm:p-6 flex-grow">
+            {selectedCandidate ? (
+              <ScoringForm 
+                candidate={selectedCandidate} user={currentUser} 
+                onSave={handleSaveScore} onCancel={() => setSelectedCandidate(null)} 
+              />
+            ) : (
+              <InterviewerDashboard 
+                session={activeSession}
+                candidates={activeSession.candidates.filter(c => c.groupId === currentUser.groupId)} 
+                user={currentUser} examInfo={activeSession.examInfo}
+                onSelectCandidate={setSelectedCandidate} onPrint={setPrintData}
+              />
+            )}
+          </div>
+          <AppFooter />
+        </div>
+      );
+    }
+
+    // ================= COMPONENTS =================
+
+    function AppFooter({ dark = false }) {
+      const year = new Date().getFullYear();
+      return (
+        <footer className={`py-6 text-center text-sm print-hide ${dark ? 'text-slate-400 bg-slate-900' : 'text-slate-500 bg-white border-t border-slate-200'} mt-auto`}>
+          <div className="max-w-6xl mx-auto px-4">
+            &copy; {year} สภาวิชาชีพสังคมสงเคราะห์. All rights reserved.
+          </div>
+        </footer>
+      );
+    }
+
+    function LoginScreen({ onLogin, sessions }) {
+      const activeSessions = sessions.filter(s => s.isOpen !== false);
+      const [selectedSessionId, setSelectedSessionId] = useState('');
+      const [selectedGroup, setSelectedGroup] = useState('');
+      const [loadingSlot, setLoadingSlot] = useState('');
+
+      const [showAdminLogin, setShowAdminLogin] = useState(false);
+      const [adminPassword, setAdminPassword] = useState('');
+      const [isAdminSubmitting, setIsAdminSubmitting] = useState(false);
+
+      const handleAdminSubmit = async (e) => {
+        e.preventDefault();
+        setIsAdminSubmitting(true);
+        try {
+          const res = await callServer('verifyAdminLogin', adminPassword);
+          if (res && res.success) {
+            onLogin({ role: 'admin', name: 'เจ้าหน้าที่ส่วนกลาง (Admin)', token: res.token });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'เข้าสู่ระบบล้มเหลว',
+              text: (res && res.message) || 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง',
+              confirmButtonColor: '#3085d6'
+            });
+            setAdminPassword('');
+          }
+        } catch (err) {
+          Swal.fire({ icon: 'error', title: 'เชื่อมต่อไม่สำเร็จ', text: err.message, confirmButtonColor: '#3085d6' });
+        } finally {
+          setIsAdminSubmitting(false);
+        }
+      };
+
+      useEffect(() => {
+        if (activeSessions.length > 0 && !activeSessions.find(s => s.id === selectedSessionId)) {
+          setSelectedSessionId(activeSessions[0].id);
+        }
+      }, [activeSessions, selectedSessionId]);
+
+      const activeSession = activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0];
+      const interviewers = activeSession?.interviewers || {};
+
+      useEffect(() => {
+        const groups = Object.keys(interviewers);
+        if (groups.length > 0) { setSelectedGroup(groups[0]); } 
+        else { setSelectedGroup(''); }
+      }, [selectedSessionId, interviewers]);
+
+      // --- เข้าสู่ระบบกรรมการ: ตรวจรหัสผ่านที่ฝั่งเซิร์ฟเวอร์เสมอ ---
+      const doInterviewerLogin = async (slot, password) => {
+        setLoadingSlot(slot);
+        try {
+          const res = await callServer('verifyInterviewerLogin', selectedSessionId, selectedGroup, slot, password || '');
+          if (res && res.success) {
+            onLogin({ role: 'interviewer', name: res.name, groupId: Number(selectedGroup), invSlot: slot, sessionId: selectedSessionId, token: res.token });
+            return true;
+          }
+          Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: (res && res.message) || 'เกิดข้อผิดพลาด', confirmButtonColor: '#3085d6' });
+          return false;
+        } catch (err) {
+          Swal.fire({ icon: 'error', title: 'เชื่อมต่อไม่สำเร็จ', text: err.message, confirmButtonColor: '#3085d6' });
+          return false;
+        } finally {
+          setLoadingSlot('');
+        }
+      };
+
+      const handleInterviewerLoginClick = (slot) => {
+        const groupData = interviewers[selectedGroup];
+        if (groupData && groupData.hasPassword) {
+          Swal.fire({
+            title: `เข้าสู่ระบบ ${slot === 'inv1' ? 'กรรมการ 1' : 'กรรมการ 2'}`,
+            input: 'password',
+            inputLabel: `กรุณากรอกรหัสผ่านของกลุ่มที่ ${selectedGroup}`,
+            inputPlaceholder: 'รหัสผ่าน',
+            showCancelButton: true,
+            confirmButtonText: 'เข้าสู่ระบบ',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#2563eb',
+            showLoaderOnConfirm: true,
+            preConfirm: async (value) => {
+              if (!value) { Swal.showValidationMessage('กรุณากรอกรหัสผ่าน!'); return false; }
+              const ok = await doInterviewerLogin(slot, value);
+              if (!ok) { Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง หรือเกิดข้อผิดพลาด'); return false; }
+              return true;
+            }
+          });
+        } else {
+          doInterviewerLogin(slot, '');
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-900">
+          <div className="flex-grow flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center">
+              <img src="https://img2.pic.in.th/New-Logo-2564.jpg" alt="โลโก้" className="w-24 h-auto mx-auto mb-4 object-contain" />
+              <h1 className="text-2xl font-bold text-slate-800 mb-2">ระบบให้คะแนนสอบสัมภาษณ์</h1>
+              <p className="text-sm text-slate-500 mb-6">สภาวิชาชีพสังคมสงเคราะห์</p>
+
+              {showAdminLogin ? (
+                <form onSubmit={handleAdminSubmit} className="text-left bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6 shadow-inner">
+                  <label className="block text-sm font-bold text-slate-800 mb-3 border-b border-slate-200 pb-2">เข้าสู่ระบบส่วนกลาง</label>
+                  <input
+                    type="password"
+                    placeholder="กรอกรหัสผ่าน Admin"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-1 text-sm"
+                    autoFocus
+                  />
+                  <div className="flex gap-2 mt-4">
+                    <button type="button" onClick={() => { setShowAdminLogin(false); setAdminPassword(''); }} className="flex-1 py-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors">
+                      ยกเลิก
+                    </button>
+                    <button type="submit" disabled={isAdminSubmitting} className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-2">
+                      {isAdminSubmitting ? <span className="loader !w-4 !h-4 !border-2"></span> : 'เข้าสู่ระบบ'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button onClick={() => setShowAdminLogin(true)} className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors mb-6 shadow-sm">
+                  เข้าสู่ระบบ: เจ้าหน้าที่ส่วนกลาง (Admin)
+                </button>
+              )}
+              
+              <div className="text-left bg-slate-50 p-5 rounded-xl border border-slate-200">
+                <label className="block text-sm font-bold text-slate-800 mb-2 border-b border-slate-200 pb-2">สำหรับกรรมการสอบ</label>
+                
+                {activeSessions.length > 0 ? (
+                  <>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1 mt-3">1. เลือกรอบสอบ</label>
+                    <select 
+                      value={selectedSessionId} 
+                      onChange={(e) => setSelectedSessionId(Number(e.target.value))}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4 text-sm font-medium text-slate-700"
+                    >
+                      {activeSessions.map(s => {
+                        const dateStr = formatDateSafe(s.examInfo.date);
+                        return (
+                          <option key={s.id} value={s.id}>
+                            ครั้งที่ {s.examInfo.round}/{s.examInfo.year} - {dateStr}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {selectedGroup !== '' ? (
+                      <>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">2. เลือกกลุ่มสอบ</label>
+                        <select 
+                          value={selectedGroup} 
+                          onChange={(e) => setSelectedGroup(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-4 text-sm"
+                        >
+                          {Object.keys(interviewers).map(k => (
+                            <option key={k} value={k}>กลุ่มที่ {k}</option>
+                          ))}
+                        </select>
+
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">3. เข้าสู่ระบบในฐานะ</label>
+                        <div className="grid grid-cols-1 gap-2">
+                          <button onClick={() => handleInterviewerLoginClick('inv1')} disabled={loadingSlot !== ''} className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors text-left flex items-center shadow-sm relative">
+                            <span className="w-20 opacity-80">กรรมการ 1</span> 
+                            <span className="flex-1 truncate">{interviewers[selectedGroup]?.inv1 || 'ยังไม่ระบุชื่อ'}</span>
+                            {loadingSlot === 'inv1' ? <span className="loader !w-4 !h-4 !border-2 !border-t-white"></span> : (interviewers[selectedGroup]?.hasPassword && <Icons.Lock className="w-4 h-4 opacity-50 absolute right-4" />)}
+                          </button>
+                          <button onClick={() => handleInterviewerLoginClick('inv2')} disabled={loadingSlot !== ''} className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors text-left flex items-center shadow-sm relative">
+                            <span className="w-20 opacity-80">กรรมการ 2</span> 
+                            <span className="flex-1 truncate">{interviewers[selectedGroup]?.inv2 || 'ยังไม่ระบุชื่อ'}</span>
+                            {loadingSlot === 'inv2' ? <span className="loader !w-4 !h-4 !border-2 !border-t-white"></span> : (interviewers[selectedGroup]?.hasPassword && <Icons.Lock className="w-4 h-4 opacity-50 absolute right-4" />)}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-red-500 text-center py-4 bg-red-50 rounded-lg">รอบสอบนี้ยังไม่ได้ตั้งค่ากลุ่มสอบ</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-6">
+                     <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
+                       <Icons.EyeOff className="w-6 h-6" />
+                     </div>
+                     <p className="text-sm font-bold text-slate-600">ไม่มีรอบสอบที่เปิดให้ประเมิน</p>
+                     <p className="text-xs text-slate-400 mt-1">ส่วนกลางได้ปิดรับคะแนนรอบสอบทั้งหมดแล้ว</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <AppFooter dark={true} />
+        </div>
+      );
+    }
+
+    function NavBar({ user, onLogout, onRefresh, isRefreshing }) {
+      return (
+        <nav className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10 print-hide">
+          <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="https://img2.pic.in.th/New-Logo-2564.jpg" alt="โลโก้" className="h-10 w-auto object-contain" />
+              <span className="font-bold text-slate-800 hidden sm:inline">ระบบสอบสัมภาษณ์</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {onRefresh && (
+                <button onClick={onRefresh} disabled={isRefreshing} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50" title="รีเฟรชข้อมูลล่าสุด">
+                  <svg className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+              )}
+              <div className="text-sm text-right">
+                <div className="font-medium text-slate-800">{user.name}</div>
+                <div className="text-slate-500 text-xs">
+                  {user.role === 'admin' ? 'ผู้ดูแลระบบ' : `กรรมการสอบ กลุ่ม ${user.groupId}`}
+                </div>
+              </div>
+              <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ออกจากระบบ">
+                <Icons.LogOut />
+              </button>
+            </div>
+          </div>
+        </nav>
+      );
+    }
+
+    // --- ADMIN CONTROLLER ---
+    function AdminController({ sessions, setSessions, onPrint, token, reload }) {
+      const [view, setView] = useState('list'); 
+      const [adminActiveSessionId, setAdminActiveSessionId] = useState(null);
+      const [isCreating, setIsCreating] = useState(false);
+
+      const handleCreateSession = async () => {
+        const newId = sessions.length > 0 ? Math.max(...sessions.map(s => s.id)) + 1 : 1;
+        setIsCreating(true);
+        try {
+          const res = await callServer('createSessionSheet', token, newId);
+          if (!res || !res.success) {
+            Swal.fire({ icon: 'error', title: 'สร้างไม่สำเร็จ', text: (res && res.message) || 'เกิดข้อผิดพลาด', confirmButtonColor: '#3085d6' });
+            return;
+          }
+          const newSession = { 
+            id: newId, 
+            isOpen: true,
+            examInfo: { round: '1', year: new Date().getFullYear() + 543, date: '', time: '09.30 - 14.30 น.' }, 
+            interviewers: { 1: { inv1: '', inv2: '', hasPassword: false } }, 
+            candidates: [] 
+          };
+          setSessions([...sessions, newSession]);
+        } catch (err) {
+          Swal.fire({ icon: 'error', title: 'เชื่อมต่อไม่สำเร็จ', text: err.message, confirmButtonColor: '#3085d6' });
+        } finally {
+          setIsCreating(false);
+        }
+      };
+
+      const handleDeleteSession = (id) => {
+        Swal.fire({
+          title: 'ยืนยันการลบรอบสอบ?',
+          text: `คุณต้องการลบรอบสอบ ${formatSessionId(id)} ใช่หรือไม่? ข้อมูลทั้งหมดในรอบนี้จะสูญหายถาวรและกู้คืนไม่ได้`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#3085d6',
+          confirmButtonText: 'ลบข้อมูล',
+          cancelButtonText: 'ยกเลิก',
+          showLoaderOnConfirm: true,
+          preConfirm: async () => {
+            const res = await callServer('deleteSessionSheet', token, id);
+            if (!res || !res.success) { Swal.showValidationMessage((res && res.message) || 'ลบไม่สำเร็จ'); return false; }
+            return true;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            setSessions(sessions.filter(s => s.id !== id));
+            Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', text: 'รอบสอบถูกลบออกจากระบบแล้ว', timer: 1500, showConfirmButton: false });
+          }
+        });
+      };
+
+      const handleToggleOpen = async (id) => {
+        const sessionToToggle = sessions.find(s => s.id === id);
+        const newStatus = sessionToToggle.isOpen === false ? true : false;
+        setSessions(prev => prev.map(s => s.id === id ? { ...s, isOpen: newStatus } : s));
+        const res = await callServer('toggleSessionStatus', token, id, newStatus);
+        if (!res || !res.success) {
+          setSessions(prev => prev.map(s => s.id === id ? { ...s, isOpen: !newStatus } : s));
+          Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: (res && res.message) || 'เกิดข้อผิดพลาด กรุณาลองใหม่', confirmButtonColor: '#3085d6' });
+        }
+      };
+
+      if (view === 'list') {
+        const allStats = sessions.reduce((acc, session) => {
+          const stats = getSessionStats(session.candidates);
+          acc.total += stats.total;
+          acc.passed += stats.passed;
+          acc.failed += stats.failed;
+          acc.pending += stats.pending;
+          return acc;
+        }, { total: 0, passed: 0, failed: 0, pending: 0 });
+
+        allStats.passedPct = allStats.total > 0 ? ((allStats.passed / allStats.total) * 100).toFixed(1) : 0;
+        allStats.failedPct = allStats.total > 0 ? ((allStats.failed / allStats.total) * 100).toFixed(1) : 0;
+
+        return (
+          <div className="space-y-6 mt-2">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-slate-800">รายการรอบสอบทั้งหมด</h2>
+              <button onClick={handleCreateSession} disabled={isCreating} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm flex items-center gap-2 transition-colors">
+                <Icons.Plus /> สร้างรอบการสอบใหม่
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-bold mb-1">ผู้เข้าสอบทั้งหมด (สะสม)</p>
+                  <h3 className="text-2xl font-black text-slate-800">{allStats.total} <span className="text-sm font-normal text-slate-500">คน</span></h3>
+                </div>
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-full"><Icons.Users className="w-6 h-6"/></div>
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-green-600 font-bold mb-1">สอบผ่านสะสม</p>
+                  <h3 className="text-2xl font-black text-green-700">{allStats.passed} <span className="text-sm font-normal text-green-600/70">({allStats.passedPct}%)</span></h3>
+                </div>
+                <div className="p-3 bg-green-50 text-green-600 rounded-full"><Icons.CheckBadge className="w-6 h-6"/></div>
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-red-500 font-bold mb-1">สอบไม่ผ่านสะสม</p>
+                  <h3 className="text-2xl font-black text-red-600">{allStats.failed} <span className="text-sm font-normal text-red-500/70">({allStats.failedPct}%)</span></h3>
+                </div>
+                <div className="p-3 bg-red-50 text-red-500 rounded-full"><Icons.XBadge className="w-6 h-6"/></div>
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-amber-500 font-bold mb-1">รอประเมิน / ไม่ครบ</p>
+                  <h3 className="text-2xl font-black text-amber-600">{allStats.pending} <span className="text-sm font-normal text-amber-500/70">คน</span></h3>
+                </div>
+                <div className="p-3 bg-amber-50 text-amber-500 rounded-full"><Icons.Clock className="w-6 h-6"/></div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sessions.map(s => {
+                const stats = getSessionStats(s.candidates);
+                const isOpen = s.isOpen !== false;
+
+                return (
+                  <div key={s.id} className={`bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow relative ${isOpen ? 'border-blue-200' : 'border-slate-200 opacity-90'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="text-lg font-extrabold text-slate-800">ลำดับที่ {formatSessionId(s.id)}</div>
+                        <div className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md inline-block mt-1">
+                          ครั้งที่ {s.examInfo.round}/{s.examInfo.year}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleToggleOpen(s.id)} className={`px-2.5 py-1 text-xs font-bold rounded-full border flex items-center gap-1 transition-colors ${isOpen ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
+                          {isOpen ? <><span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span> เปิดรับคะแนน</> : <><Icons.EyeOff className="w-3 h-3" /> ปิดแล้ว</>}
+                        </button>
+                        <button onClick={() => handleDeleteSession(s.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="ลบรอบสอบนี้">
+                          <Icons.Trash />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2.5 text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-2"><Icons.Clock /> <span className="font-medium">วันที่:</span> {formatDateSafe(s.examInfo.date)}</div>
+                      <div className="flex items-center gap-2"><Icons.Settings /> <span className="font-medium">กลุ่มสอบ:</span> {Object.keys(s.interviewers).length} กลุ่ม</div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mb-5">
+                      <div className="bg-slate-50 p-2 rounded-lg text-center border border-slate-100">
+                        <div className="text-[11px] text-slate-500 mb-0.5 font-bold">ทั้งหมด</div>
+                        <div className="text-base font-bold text-slate-700">{stats.total} <span className="text-[10px] font-normal text-slate-400">คน</span></div>
+                      </div>
+                      <div className="bg-green-50 p-2 rounded-lg text-center border border-green-100">
+                        <div className="text-[11px] text-green-600 mb-0.5 font-bold">ผ่าน</div>
+                        <div className="text-base font-bold text-green-700">{stats.passed} <span className="text-[10px] font-normal opacity-70">({stats.passedPct}%)</span></div>
+                      </div>
+                      <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100">
+                        <div className="text-[11px] text-red-600 mb-0.5 font-bold">ไม่ผ่าน</div>
+                        <div className="text-base font-bold text-red-700">{stats.failed} <span className="text-[10px] font-normal opacity-70">({stats.failedPct}%)</span></div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => { setAdminActiveSessionId(s.id); setView('manage'); }} className="bg-slate-100 text-slate-700 py-2.5 rounded-lg hover:bg-slate-200 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+                        <Icons.Settings /> จัดการข้อมูล
+                      </button>
+                      <button onClick={() => { setAdminActiveSessionId(s.id); setView('results'); }} className="bg-emerald-50 text-emerald-700 py-2.5 rounded-lg hover:bg-emerald-100 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+                        <Icons.FileText /> สรุปผล
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {sessions.length === 0 && (
+                <div className="col-span-full text-center py-16 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 flex flex-col items-center">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm border border-slate-100"><Icons.FileText className="w-8 h-8"/></div>
+                  ยังไม่มีรอบสอบในระบบ กรุณาสร้างรอบการสอบใหม่
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      const session = sessions.find(s => s.id === adminActiveSessionId);
+      if (!session) return <div className="p-8 text-center">ไม่พบข้อมูล <button onClick={() => setView('list')} className="text-blue-500 underline ml-2">กลับ</button></div>;
+
+      return (
+        <AdminDashboard 
+          session={session} activeTab={view} setActiveTab={setView}
+          onBack={() => { setView('list'); setAdminActiveSessionId(null); }}
+          updateSession={(key, val) => { setSessions(prev => prev.map(s => s.id === session.id ? { ...s, [key]: val } : s)); }}
+          onPrint={onPrint} token={token} reload={reload}
+        />
+      );
+    }
+
+    // --- ADMIN DASHBOARD (รายละเอียดรอบสอบ) ---
+    function AdminDashboard({ session, activeTab, setActiveTab, onBack, updateSession, onPrint, token, reload }) {
+      const [filterGroup, setFilterGroup] = useState('all');
+      const [searchQuery, setSearchQuery] = useState('');
+
+      const setCandidates = (updater) => updateSession('candidates', typeof updater === 'function' ? updater(session.candidates) : updater);
+      const setInterviewers = (updater) => updateSession('interviewers', typeof updater === 'function' ? updater(session.interviewers) : updater);
+      const setExamInfo = (updater) => updateSession('examInfo', typeof updater === 'function' ? updater(session.examInfo) : updater);
+
+      const stats = getSessionStats(session.candidates);
+
+      const processedCandidates = useMemo(() => {
+        let filtered = session.candidates;
+        if (filterGroup !== 'all') filtered = filtered.filter(c => c.groupId === Number(filterGroup));
+        if (searchQuery.trim() !== '') {
+          const q = searchQuery.trim().toLowerCase();
+          filtered = filtered.filter(c => `${c.title || ''}${c.name || ''}`.toLowerCase().includes(q));
+        }
+
+        return filtered.map(c => {
+          const s1 = c.scores.inv1?.total;
+          const s2 = c.scores.inv2?.total;
+          let average = null;
+          let status = 'รอประเมิน';
+          let statusColor = 'bg-slate-100 text-slate-600';
+
+          if (s1 != null && s2 != null) {
+            average = (s1 + s2) / 2;
+            if (average >= 60) { status = 'ผ่าน'; statusColor = 'bg-green-100 text-green-700'; } 
+            else { status = 'ไม่ผ่าน'; statusColor = 'bg-red-100 text-red-700'; }
+          } else if (s1 != null || s2 != null) {
+            status = 'ประเมินแล้ว 1 ท่าน'; statusColor = 'bg-amber-100 text-amber-700';
+          }
+          return { ...c, s1, s2, average, status, statusColor };
+        });
+      }, [session.candidates, filterGroup, searchQuery]);
+
+      const sessionName = formatSessionId(session.id);
+
+      return (
+        <div className="space-y-6 mt-2">
+          {/* Header & Back Button */}
+          <div className="flex items-center gap-4 border-b border-slate-200 pb-4">
+             <button onClick={onBack} className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors shadow-sm">
+               <Icons.ArrowLeft />
+             </button>
+             <div>
+               <h2 className="text-2xl font-bold text-slate-800">จัดการรอบสอบ: {sessionName}</h2>
+               <p className="text-sm font-medium text-slate-500 mt-1">
+                  ครั้งที่ {session.examInfo.round}/{session.examInfo.year} | วันที่สอบ: {formatDateSafe(session.examInfo.date)}
+               </p>
+             </div>
+          </div>
+
+          {/* TABS */}
+          <div className="flex border-b border-slate-200">
+            <button onClick={() => setActiveTab('manage')} className={`py-3 px-6 font-bold text-sm focus:outline-none flex items-center gap-2 transition-colors ${activeTab === 'manage' ? 'border-b-2 border-blue-600 text-blue-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+              <Icons.Settings /> จัดการข้อมูลรายกลุ่ม
+            </button>
+            <button onClick={() => setActiveTab('results')} className={`py-3 px-6 font-bold text-sm focus:outline-none flex items-center gap-2 transition-colors ${activeTab === 'results' ? 'border-b-2 border-blue-600 text-blue-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+              <Icons.FileText /> สรุปผลการประเมิน
+            </button>
+          </div>
+
+          {activeTab === 'manage' ? (
+            <ManageDataView 
+              session={session}
+              candidates={session.candidates} setCandidates={setCandidates}
+              interviewers={session.interviewers} setInterviewers={setInterviewers}
+              examInfo={session.examInfo} setExamInfo={setExamInfo}
+              token={token} reload={reload}
+            />
+          ) : (
+            <div className="space-y-6">
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500 font-bold mb-1">ผู้เข้าสอบทั้งหมด</p>
+                    <h3 className="text-2xl font-black text-slate-800">{stats.total} <span className="text-sm font-normal text-slate-500">คน</span></h3>
+                  </div>
+                  <div className="p-3 bg-blue-50 text-blue-600 rounded-full"><Icons.Users className="w-6 h-6"/></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-green-600 font-bold mb-1">สอบผ่าน</p>
+                    <h3 className="text-2xl font-black text-green-700">{stats.passed} <span className="text-sm font-normal text-green-600/70">({stats.passedPct}%)</span></h3>
+                  </div>
+                  <div className="p-3 bg-green-50 text-green-600 rounded-full"><Icons.CheckBadge className="w-6 h-6"/></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-red-500 font-bold mb-1">สอบไม่ผ่าน</p>
+                    <h3 className="text-2xl font-black text-red-600">{stats.failed} <span className="text-sm font-normal text-red-500/70">({stats.failedPct}%)</span></h3>
+                  </div>
+                  <div className="p-3 bg-red-50 text-red-500 rounded-full"><Icons.XBadge className="w-6 h-6"/></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-amber-500 font-bold mb-1">รอประเมิน / ไม่ครบ</p>
+                    <h3 className="text-2xl font-black text-amber-600">{stats.pending} <span className="text-sm font-normal text-amber-500/70">คน</span></h3>
+                  </div>
+                  <div className="p-3 bg-amber-50 text-amber-500 rounded-full"><Icons.Clock className="w-6 h-6"/></div>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-8">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">ตารางผลการประเมิน</h2>
+                  <p className="text-sm text-slate-500 mt-1">เกณฑ์การผ่าน: คะแนนเฉลี่ยรวม 2 ท่าน ต้องมากกว่าหรือเท่ากับ 60 คะแนน</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ค้นหาชื่อผู้เข้าสอบ..." className="border border-slate-300 rounded-lg py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white w-48 shadow-sm" />
+                    <svg className="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" /></svg>
+                  </div>
+                  <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="border border-slate-300 rounded-lg py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium shadow-sm">
+                    <option value="all">ดูผลสอบทุกกลุ่ม</option>
+                    {Object.keys(session.interviewers).map(k => <option key={k} value={k}>เฉพาะกลุ่มที่ {k}</option>)}
+                  </select>
+
+                  {filterGroup !== 'all' ? (
+                    <>
+                      <button onClick={() => onPrint({ type: 'normal', group: filterGroup, interviewerName: session.interviewers[filterGroup].inv1, invSlot: 'inv1', candidates: processedCandidates, examInfo: session.examInfo, sessionName })} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-3 py-2.5 rounded-lg font-medium text-xs shadow-sm transition-colors">
+                        <Icons.Printer /> พิมพ์ ก.1
+                      </button>
+                      <button onClick={() => onPrint({ type: 'normal', group: filterGroup, interviewerName: session.interviewers[filterGroup].inv2, invSlot: 'inv2', candidates: processedCandidates, examInfo: session.examInfo, sessionName })} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-3 py-2.5 rounded-lg font-medium text-xs shadow-sm transition-colors">
+                        <Icons.Printer /> พิมพ์ ก.2
+                      </button>
+                      <button onClick={() => onPrint({ type: 'summary', group: filterGroup, candidates: processedCandidates, examInfo: session.examInfo, sessionName })} className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm ml-2 shadow-sm transition-colors">
+                        <Icons.Printer /> พิมพ์สรุปกลุ่ม {filterGroup}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => onPrint({ type: 'summary', group: 'ทั้งหมด', candidates: processedCandidates, examInfo: session.examInfo, sessionName })} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm shadow-sm transition-colors">
+                      <Icons.Printer /> พิมพ์สรุปผลภาพรวม
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-800 text-white">
+                        <th className="p-4 font-semibold text-sm text-center">กลุ่ม</th>
+                        <th className="p-4 font-semibold text-sm">ชื่อ-สกุล</th>
+                        <th className="p-4 font-semibold text-sm text-center">คะแนน ก.1</th>
+                        <th className="p-4 font-semibold text-sm text-center">คะแนน ก.2</th>
+                        <th className="p-4 font-semibold text-sm text-center text-amber-300">คะแนนเฉลี่ย</th>
+                        <th className="p-4 font-semibold text-sm text-center">ผลการตัดสิน</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {processedCandidates.map((c, idx) => (
+                        <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50 hover:bg-slate-100 transition-colors'}>
+                          <td className="p-4 text-center font-bold text-slate-500">{c.groupId}</td>
+                          <td className="p-4 font-medium text-slate-800">{c.title}{c.name}</td>
+                          <td className="p-4 text-center">{c.s1 != null ? <span className="font-bold text-slate-700">{c.s1}</span> : '-'}</td>
+                          <td className="p-4 text-center">{c.s2 != null ? <span className="font-bold text-slate-700">{c.s2}</span> : '-'}</td>
+                          <td className="p-4 text-center bg-amber-50/30 font-bold text-lg text-slate-800">{typeof c.average === 'number' ? c.average.toFixed(2) : '-'}</td>
+                          <td className="p-4 text-center">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${c.statusColor}`}>{c.status}</span>
+                          </td>
+                        </tr>
+                      ))}
+                      {processedCandidates.length === 0 && <tr><td colSpan="6" className="text-center p-8 text-slate-500">ไม่มีข้อมูลผู้เข้าสอบ</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- MANAGE DATA VIEW ---
+    function ManageDataView({ session, candidates, setCandidates, interviewers, setInterviewers, examInfo, setExamInfo, token, reload }) {
+      const [manageGroup, setManageGroup] = useState(Number(Object.keys(interviewers)[0]) || 1);
+      const [newCandidate, setNewCandidate] = useState({ title: 'นางสาว', name: '', time: '09.30 - 10.00 น.' });
+      const [isAdding, setIsAdding] = useState(false);
+      const [isUploading, setIsUploading] = useState(false);
+      const [isSavingGroup, setIsSavingGroup] = useState(false);
+      // เก็บ "รหัสผ่านใหม่" ที่พิมพ์แต่ยังไม่บันทึกแยกไว้ต่างหาก เพราะ getInitialData ไม่ส่งรหัสผ่านเดิมมาให้ (ความปลอดภัย)
+      const [pendingPasswords, setPendingPasswords] = useState({});
+
+      const TITLE_OPTIONS = ["นาย", "นาง", "นางสาว", "ว่าที่ ร.ต.", "ว่าที่ ร.ต.หญิง", "พระ", "พระมหา", "ส.ต.อ.", "อื่นๆ"];
+      const TIME_SLOTS = ["09.00 - 09.30 น.", "09.30 - 10.00 น.", "10.00 - 10.30 น.", "10.30 - 11.00 น.", "11.00 - 11.30 น.", "11.30 - 12.00 น.", "13.00 - 13.30 น.", "13.30 - 14.00 น.", "14.00 - 14.30 น.", "14.30 - 15.00 น.", "15.00 - 15.30 น."];
+
+      const handleAddGroup = () => {
+        const newGroupNum = Object.keys(interviewers).length > 0 ? Math.max(...Object.keys(interviewers).map(Number)) + 1 : 1;
+        setInterviewers({ ...interviewers, [newGroupNum]: { inv1: '', inv2: '', hasPassword: false } });
+        setManageGroup(newGroupNum);
+      };
+
+      const handleAddCandidate = async (e) => {
+        e.preventDefault();
+        if (!newCandidate.name.trim() || isAdding) return;
+        const newId = candidates.length > 0 ? Math.max(...candidates.map(c => c.id)) + 1 : 1;
+        const cAdded = { ...newCandidate, id: newId, groupId: Number(manageGroup), scores: { inv1: null, inv2: null }, remarks: { inv1: '', inv2: '' } };
+
+        setIsAdding(true);
+        const res = await callServer('adminSyncCandidates', token, session.id, [cAdded]);
+        setIsAdding(false);
+        if (!res || !res.success) {
+          Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: (res && res.message) || 'เกิดข้อผิดพลาด', confirmButtonColor: '#3085d6' });
+          return;
+        }
+        setCandidates([...candidates, cAdded]);
+        setNewCandidate({ ...newCandidate, name: '' });
+      };
+
+      const handleDeleteCandidate = (c) => {
+        Swal.fire({
+          title: 'ยืนยันการลบ?',
+          text: `ลบ "${c.title}${c.name}" ออกจากระบบ (ลบถาวรจาก Google Sheet ด้วย)`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#3085d6',
+          confirmButtonText: 'ลบ',
+          cancelButtonText: 'ยกเลิก',
+          showLoaderOnConfirm: true,
+          preConfirm: async () => {
+            const res = await callServer('deleteCandidateRow', token, session.id, c.id);
+            if (!res || !res.success) { Swal.showValidationMessage((res && res.message) || 'ลบไม่สำเร็จ'); return false; }
+            return true;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) setCandidates(candidates.filter(item => item.id !== c.id));
+        });
+      };
+
+      const handleDownloadTemplate = () => {
+        const ws = XLSX.utils.aoa_to_sheet([
+          ["กลุ่ม", "คำนำหน้า", "ชื่อ-สกุล", "เวลาสอบ", "กรรมการ 1", "กรรมการ 2", "รหัสผ่าน"]
+        ]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "Template_นำเข้าผู้เข้าสอบ.xlsx");
+      };
+
+      const handleExcelUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+          try {
+            const bstr = evt.target.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+            let newCandidates = [];
+            let newInterviewers = { ...interviewers };
+            let maxId = candidates.length > 0 ? Math.max(...candidates.map(c => c.id)) : 0;
+            const existingKeys = new Set(candidates.map(c => `${c.groupId}::${(c.title||'')+(c.name||'')}`.toLowerCase()));
+
+            let countAdded = 0, countSkipped = 0;
+            let newPendingPasswords = {};
+
+            data.forEach(row => {
+               const groupId = Number(row['กลุ่ม'] || 1);
+               const inv1 = row['กรรมการ 1'];
+               const inv2 = row['กรรมการ 2'];
+               const password = row['รหัสผ่าน'];
+               const title = row['คำนำหน้า'] || 'นางสาว';
+               const name = row['ชื่อ-สกุล'];
+               const time = row['เวลาสอบ'] || '09.30 - 10.00 น.';
+
+               if (!newInterviewers[groupId]) newInterviewers[groupId] = { inv1: '', inv2: '', hasPassword: false };
+               if (inv1) newInterviewers[groupId].inv1 = inv1;
+               if (inv2) newInterviewers[groupId].inv2 = inv2;
+               if (password !== undefined && password !== null && String(password).trim() !== '') {
+                  newPendingPasswords[groupId] = String(password).trim();
+                  newInterviewers[groupId].hasPassword = true;
+               }
+
+               if (name && String(name).trim() !== '') {
+                 const key = `${groupId}::${(title||'')+String(name)}`.toLowerCase();
+                 if (existingKeys.has(key)) { countSkipped++; return; } // กันนำเข้าซ้ำชื่อ+กลุ่มเดิม
+                 existingKeys.add(key);
+                 maxId++;
+                 countAdded++;
+                 newCandidates.push({
+                   id: maxId, groupId: groupId, title: title, name: String(name), time: time,
+                   scores: { inv1: null, inv2: null }, remarks: { inv1: '', inv2: '' }
+                 });
+               }
+            });
+
+            setIsUploading(true);
+            const res = await callServer('adminSyncCandidates', token, session.id, newCandidates);
+            setIsUploading(false);
+
+            if (!res || !res.success) {
+              Swal.fire({ icon: 'error', title: 'ซิงค์ข้อมูลไม่สำเร็จ', text: (res && res.message) || 'เกิดข้อผิดพลาด', confirmButtonColor: '#3085d6' });
+              return;
+            }
+
+            setInterviewers(newInterviewers);
+            setCandidates([...candidates, ...newCandidates]);
+            setPendingPasswords(prev => ({ ...prev, ...newPendingPasswords }));
+
+            Swal.fire({
+              icon: 'success',
+              title: 'อัปโหลดสำเร็จ!',
+              html: `นำเข้ารายชื่อผู้เข้าสอบใหม่ ${countAdded} รายการ` + (countSkipped > 0 ? `<br/><span class="text-amber-600">ข้าม ${countSkipped} รายการที่ชื่อซ้ำกับที่มีอยู่แล้วในกลุ่มเดียวกัน</span>` : '') +
+                (Object.keys(newPendingPasswords).length > 0 ? `<br/><span class="text-blue-600 text-sm">พบรหัสผ่านในไฟล์ กด "บันทึกการตั้งค่ากลุ่ม" อีกครั้งเพื่อยืนยันการบันทึกรหัสผ่าน</span>` : ''),
+              confirmButtonColor: '#3085d6'
+            });
+
+            if (Object.keys(newInterviewers).length > 0) setManageGroup(Number(Object.keys(newInterviewers)[0]));
+          } catch (err) {
+            Swal.fire({
+              icon: 'error',
+              title: 'ข้อผิดพลาด',
+              text: 'เกิดข้อผิดพลาดในการอ่านไฟล์ Excel กรุณาตรวจสอบรูปแบบคอลัมน์ให้ตรงกับคำแนะนำ',
+              confirmButtonColor: '#3085d6'
+            });
+            console.error(err);
+          }
+          e.target.value = null; 
+        };
+        reader.readAsBinaryString(file);
+      };
+
+      const handleSaveGroupSettings = async () => {
+        setIsSavingGroup(true);
+        // ส่ง interviewers ทุกกลุ่ม; รหัสผ่านจะแนบไปเฉพาะกลุ่มที่มีการพิมพ์รหัสผ่านใหม่ (pendingPasswords)
+        // กลุ่มที่ไม่ได้แตะรหัสผ่านจะไม่ส่ง key "password" ไปเลย เพื่อให้ฝั่งเซิร์ฟเวอร์คงรหัสผ่านเดิมไว้
+        const payloadInterviewers = {};
+        Object.keys(interviewers).forEach(g => {
+          payloadInterviewers[g] = { inv1: interviewers[g].inv1 || '', inv2: interviewers[g].inv2 || '' };
+          if (Object.prototype.hasOwnProperty.call(pendingPasswords, g)) {
+            payloadInterviewers[g].password = pendingPasswords[g];
+          }
+        });
+
+        const res = await callServer('saveSessionMeta', token, session.id, examInfo, payloadInterviewers);
+        setIsSavingGroup(false);
+        if (!res || !res.success) {
+          Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: (res && res.message) || 'บันทึกไม่สำเร็จ', confirmButtonColor: '#3085d6' });
+          return;
+        }
+        setInterviewers(prev => {
+          const next = { ...prev };
+          Object.keys(pendingPasswords).forEach(g => {
+            if (next[g]) next[g] = { ...next[g], hasPassword: pendingPasswords[g].trim() !== '' };
+          });
+          return next;
+        });
+        setPendingPasswords({});
+        Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกข้อมูลกรรมการเรียบร้อยแล้ว', timer: 1500, showConfirmButton: false });
+      };
+
+      const groupCandidates = candidates.filter(c => c.groupId === Number(manageGroup));
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-6">
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Icons.Settings /> ข้อมูลหัวกระดาษรอบสอบ</h3>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <div className="w-1/2">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">ครั้งที่ (รอบ)</label>
+                    <select value={examInfo.round} onChange={(e) => setExamInfo({...examInfo, round: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white">
+                      {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div className="w-1/2">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">ปี พ.ศ.</label>
+                    <input type="number" value={examInfo.year} onChange={(e) => setExamInfo({...examInfo, year: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2 text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">วันที่สอบ</label>
+                  <input type="date" value={parseThaiDateToISO(examInfo.date)} onChange={(e) => setExamInfo({...examInfo, date: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">เวลาสอบรวม</label>
+                  <input type="text" value={examInfo.time} onChange={(e) => setExamInfo({...examInfo, time: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2 text-sm" placeholder="เช่น 09.30 – 14.30 น." />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-blue-200 bg-blue-50/30">
+              <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2 text-blue-800"><Icons.Upload /> นำเข้าข้อมูลด้วย Excel (ทั้งรอบ)</h3>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                ไฟล์ต้องมีหัวคอลัมน์บรรทัดแรกเป๊ะๆ ดังนี้:<br/>
+                <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">กลุ่ม</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">คำนำหน้า</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">ชื่อ-สกุล</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">เวลาสอบ</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">กรรมการ 1</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">กรรมการ 2</code> | <code className="bg-slate-100 px-1 py-0.5 rounded text-pink-600">รหัสผ่าน</code>
+              </p>
+              
+              <div className="flex gap-2 w-full">
+                <label className={`flex-1 flex justify-center items-center px-2 py-3 bg-white text-blue-600 rounded-lg shadow-sm tracking-wide border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors font-medium text-xs ${isUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                    {isUploading ? <span className="loader !w-4 !h-4 !border-2 mr-1"></span> : <Icons.Upload className="w-4 h-4 mr-1"/>} <span>{isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลด .xlsx'}</span>
+                    <input type='file' className="hidden" accept=".xlsx, .xls" onChange={handleExcelUpload} disabled={isUploading} />
+                </label>
+                <button onClick={handleDownloadTemplate} className="flex-1 flex justify-center items-center px-2 py-3 bg-white text-emerald-600 rounded-lg shadow-sm tracking-wide border border-emerald-200 cursor-pointer hover:bg-emerald-50 transition-colors font-medium text-xs">
+                    <Icons.Download className="w-4 h-4 mr-1"/> <span>โหลด Template</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+              <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">ตั้งค่ากรรมการรายกลุ่ม</h3>
+                <button onClick={handleAddGroup} className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-200 transition-colors">+ เพิ่มกลุ่ม</button>
+              </div>
+              
+              {Object.keys(interviewers).length > 0 ? (
+                <>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">เลือกกลุ่มที่ต้องการแก้ไข</label>
+                  <select value={manageGroup} onChange={(e) => setManageGroup(Number(e.target.value))} className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50 mb-4 font-bold">
+                    {Object.keys(interviewers).map(k => <option key={k} value={k}>กลุ่มที่ {k}</option>)}
+                  </select>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">ชื่อกรรมการ 1</label>
+                      <input type="text" value={interviewers[manageGroup]?.inv1 || ''} onChange={(e) => setInterviewers({...interviewers, [manageGroup]: {...interviewers[manageGroup], inv1: e.target.value}})} className="w-full border border-slate-300 rounded-lg p-2 text-sm" placeholder="ชื่อ-สกุล กรรมการ 1" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">ชื่อกรรมการ 2</label>
+                      <input type="text" value={interviewers[manageGroup]?.inv2 || ''} onChange={(e) => setInterviewers({...interviewers, [manageGroup]: {...interviewers[manageGroup], inv2: e.target.value}})} className="w-full border border-slate-300 rounded-lg p-2 text-sm" placeholder="ชื่อ-สกุล กรรมการ 2" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1 text-blue-600">
+                        รหัสผ่านสำหรับเข้าประเมิน
+                        {interviewers[manageGroup]?.hasPassword && !Object.prototype.hasOwnProperty.call(pendingPasswords, manageGroup) && <span className="ml-1 text-slate-400 font-normal">(ตั้งไว้แล้ว — เว้นว่างไว้เพื่อคงรหัสเดิม)</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={Object.prototype.hasOwnProperty.call(pendingPasswords, manageGroup) ? pendingPasswords[manageGroup] : ''}
+                        onChange={(e) => setPendingPasswords({ ...pendingPasswords, [manageGroup]: e.target.value })}
+                        className="w-full border border-blue-300 bg-blue-50/30 rounded-lg p-2 text-sm"
+                        placeholder={interviewers[manageGroup]?.hasPassword ? '•••• (พิมพ์เพื่อเปลี่ยนรหัสผ่าน)' : 'เช่น 1234 (ปล่อยว่าง = ไม่ตั้งรหัสผ่าน)'}
+                      />
+                      {Object.prototype.hasOwnProperty.call(pendingPasswords, manageGroup) && (
+                        <button type="button" onClick={() => { const p = { ...pendingPasswords }; delete p[manageGroup]; setPendingPasswords(p); }} className="text-xs text-slate-400 hover:text-slate-600 underline mt-1">
+                          ยกเลิกการเปลี่ยนรหัสผ่าน
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <button onClick={handleSaveGroupSettings} disabled={isSavingGroup} className="w-full mt-4 bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white p-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-2">
+                    {isSavingGroup ? <span className="loader !w-4 !h-4 !border-2"></span> : 'บันทึกการตั้งค่ากลุ่ม'}
+                  </button>
+                </>
+              ) : (
+                 <p className="text-sm text-slate-500 text-center py-4">ยังไม่มีกลุ่มสอบ</p>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">เพิ่มผู้เข้าสอบ (กลุ่ม {manageGroup}) ทำมือทีละคน</h3>
+              <form onSubmit={handleAddCandidate} className="flex flex-wrap sm:flex-nowrap gap-3">
+                <select value={newCandidate.title} onChange={e => setNewCandidate({...newCandidate, title: e.target.value})} className="border border-slate-300 rounded-lg p-2 text-sm bg-white w-24 shrink-0">
+                  {TITLE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+                <input type="text" placeholder="ชื่อ-นามสกุล" value={newCandidate.name} onChange={e => setNewCandidate({...newCandidate, name: e.target.value})} className="border border-slate-300 rounded-lg p-2 text-sm flex-1 min-w-[150px]" />
+                <select value={newCandidate.time} onChange={e => setNewCandidate({...newCandidate, time: e.target.value})} className="border border-slate-300 rounded-lg p-2 text-sm bg-white w-32 shrink-0">
+                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <button type="submit" disabled={isAdding} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2 min-w-[100px]">
+                  {isAdding ? <span className="loader !w-4 !h-4 !border-2 !border-t-white"></span> : <><Icons.Plus /> เพิ่ม</>}
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="font-bold text-slate-800">รายชื่อผู้เข้าสอบ กลุ่ม {manageGroup}</h3>
+                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{groupCandidates.length} คน</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-white border-b border-slate-100">
+                      <th className="p-4 font-semibold text-slate-500 text-sm w-32">เวลาสอบ</th>
+                      <th className="p-4 font-semibold text-slate-500 text-sm">ชื่อ-สกุล</th>
+                      <th className="p-4 font-semibold text-slate-500 text-sm text-center w-24">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {groupCandidates.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-50">
+                        <td className="p-4 text-sm text-slate-600">{c.time}</td>
+                        <td className="p-4 text-sm font-medium text-slate-800">{c.title}{c.name}</td>
+                        <td className="p-4 text-center">
+                          <button onClick={() => handleDeleteCandidate(c)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded" title="ลบรายชื่อ">
+                            <Icons.Trash />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {groupCandidates.length === 0 && <tr><td colSpan="3" className="p-8 text-center text-slate-400 text-sm">ยังไม่มีผู้เข้าสอบในกลุ่มนี้ (สามารถเพิ่มด้วยแบบฟอร์มด้านบน หรือนำเข้าจาก Excel ทางซ้าย)</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- INTERVIEWER DASHBOARD ---
+    function InterviewerDashboard({ session, candidates, user, examInfo, onSelectCandidate, onPrint }) {
+      return (
+        <div className="space-y-6 mt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">รายชื่อผู้เข้าสอบสัมภาษณ์ กลุ่ม {user.groupId}</h2>
+              <div className="flex items-center gap-2 mt-2">
+                 <span className="bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded-md">{formatSessionId(session.id)}</span>
+                 <span className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
+                   วันที่ {formatDateSafe(examInfo.date)}
+                 </span>
+              </div>
+            </div>
+            <button 
+              onClick={() => onPrint({ type: 'normal', group: user.groupId, interviewerName: user.name, invSlot: user.invSlot, candidates, examInfo, sessionName: formatSessionId(session.id) })}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium text-sm shadow-sm transition-colors"
+            >
+              <Icons.Printer /> พิมพ์ตารางให้คะแนน
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="p-4 font-semibold text-slate-600 text-sm">เวลาสอบ</th>
+                    <th className="p-4 font-semibold text-slate-600 text-sm">ชื่อ-สกุล</th>
+                    <th className="p-4 font-semibold text-slate-600 text-sm text-center">สถานะ</th>
+                    <th className="p-4 font-semibold text-slate-600 text-sm text-center">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {candidates.map(candidate => {
+                    const myScore = candidate.scores[user.invSlot];
+                    const isEvaluated = myScore !== null;
+                    return (
+                      <tr key={candidate.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 text-sm font-medium text-slate-700">
+                          <div className="flex items-center gap-2 text-slate-500"><Icons.Clock />{candidate.time}</div>
+                        </td>
+                        <td className="p-4 text-sm font-medium text-slate-800">{candidate.title}{candidate.name}</td>
+                        <td className="p-4 text-center">
+                          {isEvaluated ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                              <Icons.CheckCircle /> ประเมินแล้ว ({myScore.total})
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">รอการประเมิน</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-center">
+                          <button onClick={() => onSelectCandidate(candidate)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm ${isEvaluated ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                            {isEvaluated ? 'ดู/แก้ไขคะแนน' : 'ให้คะแนน'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {candidates.length === 0 && <tr><td colSpan="4" className="text-center p-8 text-slate-500">ไม่มีรายชื่อผู้เข้าสอบในกลุ่มนี้</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- SCORING FORM ---
+    function ScoringForm({ candidate, user, onSave, onCancel }) {
+      const [scores, setScores] = useState({ skill: '', attitude: '', writing: '', presentation: '' });
+      const [skillLevel, setSkillLevel] = useState('');
+      const [attitudeLevel, setAttitudeLevel] = useState('');
+      const [writingLevel, setWritingLevel] = useState('');
+      const [presentationLevel, setPresentationLevel] = useState('');
+      const [remark, setRemark] = useState('');
+      const [isSubmitting, setIsSubmitting] = useState(false);
+
+      useEffect(() => {
+        if (candidate.scores[user.invSlot]) {
+          const s = candidate.scores[user.invSlot];
+          setScores(s);
+          setSkillLevel(getLevelFromScore30(s.skill));
+          setAttitudeLevel(getLevelFromScore30(s.attitude));
+          setWritingLevel(getLevelFromScore20(s.writing));
+          setPresentationLevel(getLevelFromScore20(s.presentation));
+          setRemark(candidate.remarks[user.invSlot] || '');
+        }
+      }, [candidate, user]);
+
+      const totalScore = [scores.skill, scores.attitude, scores.writing, scores.presentation].reduce((sum, val) => sum + (Number(val) || 0), 0);
+      
+      const isScoreValid = (val, level, rangesDef) => {
+        if (val === '' || !level) return false;
+        const num = Number(val);
+        const range = rangesDef[level];
+        return num >= range.min && num <= range.max;
+      };
+
+      const isValid = isScoreValid(scores.skill, skillLevel, RANGES_30) && 
+                      isScoreValid(scores.attitude, attitudeLevel, RANGES_30) && 
+                      isScoreValid(scores.writing, writingLevel, RANGES_20) && 
+                      isScoreValid(scores.presentation, presentationLevel, RANGES_20);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!isValid) return;
+        setIsSubmitting(true);
+        try { 
+          await onSave(candidate.id, scores, remark);
+          Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ',
+            text: 'บันทึกคะแนนเรียบร้อยแล้ว',
+            timer: 1500,
+            showConfirmButton: false
+          });
+        } 
+        catch (error) { 
+          Swal.fire({
+            icon: 'error',
+            title: 'ข้อผิดพลาด',
+            text: error.message,
+            confirmButtonColor: '#3085d6'
+          });
+        } 
+        finally { setIsSubmitting(false); }
+      };
+
+      const getOptionStyle = (isSelected, type) => {
+        if (!isSelected) return { container: 'border-slate-200 hover:border-slate-300', text: 'text-slate-800', desc: 'text-slate-500', score: 'text-blue-600', radio: '' };
+        if (type === 'green') return { container: 'border-green-500 bg-green-50 ring-2 ring-green-500', text: 'text-green-800', desc: 'text-green-600', score: 'text-green-700', radio: 'accent-green-600' };
+        if (type === 'amber') return { container: 'border-amber-500 bg-amber-50 ring-2 ring-amber-500', text: 'text-amber-800', desc: 'text-amber-600', score: 'text-amber-700', radio: 'accent-amber-500' };
+        if (type === 'red') return { container: 'border-red-500 bg-red-50 ring-2 ring-red-500', text: 'text-red-800', desc: 'text-red-600', score: 'text-red-700', radio: 'accent-red-600' };
+      }
+
+      return (
+        <div className="max-w-3xl mx-auto pb-12 mt-2">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">ฟอร์มประเมินคะแนน</h2>
+              <p className="text-slate-500 mt-1">ผู้เข้าสอบ: <span className="font-semibold text-slate-700">{candidate.title}{candidate.name}</span></p>
+            </div>
+            <button onClick={onCancel} className="text-slate-500 hover:text-slate-800 bg-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">กลับหน้าตาราง</button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Criteria 1 (Full Width) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold text-lg text-slate-800">1. ทักษะทางสังคมสงเคราะห์ในการปฏิบัติงาน</h3>
+                <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">เต็ม 30</span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed">ประเมินจากทักษะต่างๆ 13 ด้าน เช่น การสร้างสัมพันธภาพ การสื่อสาร การค้นหาข้อเท็จจริง การเยี่ยมบ้าน การจัดการรายกรณี และการแก้ปัญหา เป็นต้น</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {Object.entries(RANGES_30).map(([key, info]) => {
+                  const isSelected = skillLevel === key;
+                  const style = getOptionStyle(isSelected, info.c);
+                  let desc = '';
+                  if(key==='excellent') desc = '> 3 ทักษะ';
+                  if(key==='good') desc = '2-3 ทักษะ';
+                  if(key==='fair') desc = '1 ทักษะ';
+                  return (
+                    <label key={key} className={`border rounded-lg p-4 cursor-pointer transition-all ${style.container}`}>
+                      <div className="flex justify-between mb-1">
+                        <span className={`font-semibold ${style.text}`}>{info.label}</span>
+                        <input type="radio" name="skillLevel" checked={isSelected} onChange={() => { setSkillLevel(key); setScores({...scores, skill: ''}); }} className={`w-4 h-4 ${style.radio}`} />
+                      </div>
+                      <div className={`text-xs mb-2 ${style.desc}`}>{desc}</div>
+                      <div className={`text-lg font-bold ${style.score}`}>{info.min}-{info.max} คะแนน</div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {skillLevel && (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                   <label className="text-sm font-bold text-slate-700 whitespace-nowrap">ระบุคะแนน ({RANGES_30[skillLevel].min}-{RANGES_30[skillLevel].max}):</label>
+                   <input type="number" min={RANGES_30[skillLevel].min} max={RANGES_30[skillLevel].max} required value={scores.skill} onChange={(e) => setScores({...scores, skill: e.target.value})} className="w-full sm:w-32 border border-slate-300 rounded-lg p-2 text-lg text-center font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+              )}
+            </div>
+
+            {/* Criteria 2 (Full Width) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold text-lg text-slate-800">2. ทัศนคติทางสังคมสงเคราะห์</h3>
+                <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">เต็ม 30</span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed">ประเมินจาก 8 ด้าน เช่น การไม่ตำหนิหรือตัดสิน การเคารพความหลากหลาย ความเห็นอกเห็นใจ ความเป็นธรรมทางสังคม และการคำนึงถึงประโยชน์สูงสุดของผู้ใช้บริการ</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {Object.entries(RANGES_30).map(([key, info]) => {
+                  const isSelected = attitudeLevel === key;
+                  const style = getOptionStyle(isSelected, info.c);
+                  let desc = '';
+                  if(key==='excellent') desc = '> 4 ด้าน';
+                  if(key==='good') desc = '3-4 ด้าน';
+                  if(key==='fair') desc = '1-2 ด้าน';
+                  return (
+                    <label key={key} className={`border rounded-lg p-4 cursor-pointer transition-all ${style.container}`}>
+                      <div className="flex justify-between mb-1">
+                        <span className={`font-semibold ${style.text}`}>{info.label}</span>
+                        <input type="radio" name="attitudeLevel" checked={isSelected} onChange={() => { setAttitudeLevel(key); setScores({...scores, attitude: ''}); }} className={`w-4 h-4 ${style.radio}`} />
+                      </div>
+                      <div className={`text-xs mb-2 ${style.desc}`}>{desc}</div>
+                      <div className={`text-lg font-bold ${style.score}`}>{info.min}-{info.max} คะแนน</div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {attitudeLevel && (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                   <label className="text-sm font-bold text-slate-700 whitespace-nowrap">ระบุคะแนน ({RANGES_30[attitudeLevel].min}-{RANGES_30[attitudeLevel].max}):</label>
+                   <input type="number" min={RANGES_30[attitudeLevel].min} max={RANGES_30[attitudeLevel].max} required value={scores.attitude} onChange={(e) => setScores({...scores, attitude: e.target.value})} className="w-full sm:w-32 border border-slate-300 rounded-lg p-2 text-lg text-center font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+              )}
+            </div>
+
+            {/* Criteria 3 (Full Width) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold text-lg text-slate-800">3. การเขียน</h3>
+                <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">เต็ม 20</span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed">ประเมินจากการเขียนรายงานที่อธิบายเนื้อหาสอดคล้อง สมเหตุสมผล เรียบเรียงเข้าใจง่าย ภาษาเหมาะสม มีส่วนนำ เนื้อหา และสรุปชัดเจน รวมถึงมีการอ้างอิงตามระบบวิชาการ</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {Object.entries(RANGES_20).map(([key, info]) => {
+                  const isSelected = writingLevel === key;
+                  const style = getOptionStyle(isSelected, info.c);
+                  return (
+                    <label key={key} className={`border rounded-lg p-4 cursor-pointer transition-all ${style.container}`}>
+                      <div className="flex justify-between mb-1">
+                        <span className={`font-semibold ${style.text}`}>{info.label}</span>
+                        <input type="radio" name="writingLevel" checked={isSelected} onChange={() => { setWritingLevel(key); setScores({...scores, writing: ''}); }} className={`w-4 h-4 ${style.radio}`} />
+                      </div>
+                      <div className={`text-xs ${style.desc}`}>{info.min}-{info.max} คะแนน</div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {writingLevel && (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                   <label className="text-sm font-bold text-slate-700 whitespace-nowrap">ระบุคะแนน ({RANGES_20[writingLevel].min}-{RANGES_20[writingLevel].max}):</label>
+                   <input type="number" min={RANGES_20[writingLevel].min} max={RANGES_20[writingLevel].max} required value={scores.writing} onChange={(e) => setScores({...scores, writing: e.target.value})} className="w-full sm:w-32 border border-slate-300 rounded-lg p-2 text-lg text-center font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+              )}
+            </div>
+
+            {/* Criteria 4 (Full Width) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-lg text-slate-800">4. การนำเสนอ</h3>
+                <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">เต็ม 20</span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed">ประเมินจากการอธิบายและวิเคราะห์ความเชื่อมโยงของเนื้อหาได้ชัดเจนและตรงประเด็น</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {Object.entries(RANGES_20).map(([key, info]) => {
+                  const isSelected = presentationLevel === key;
+                  const style = getOptionStyle(isSelected, info.c);
+                  return (
+                    <label key={key} className={`border rounded-lg p-4 cursor-pointer transition-all ${style.container}`}>
+                      <div className="flex justify-between mb-1">
+                        <span className={`font-semibold ${style.text}`}>{info.label}</span>
+                        <input type="radio" name="presentationLevel" checked={isSelected} onChange={() => { setPresentationLevel(key); setScores({...scores, presentation: ''}); }} className={`w-4 h-4 ${style.radio}`} />
+                      </div>
+                      <div className={`text-xs ${style.desc}`}>{info.min}-{info.max} คะแนน</div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {presentationLevel && (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                   <label className="text-sm font-bold text-slate-700 whitespace-nowrap">ระบุคะแนน ({RANGES_20[presentationLevel].min}-{RANGES_20[presentationLevel].max}):</label>
+                   <input type="number" min={RANGES_20[presentationLevel].min} max={RANGES_20[presentationLevel].max} required value={scores.presentation} onChange={(e) => setScores({...scores, presentation: e.target.value})} className="w-full sm:w-32 border border-slate-300 rounded-lg p-2 text-lg text-center font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+               <h3 className="font-semibold text-lg text-slate-800 mb-3">ข้อเสนอแนะเพิ่มเติม</h3>
+               <textarea rows="3" value={remark} onChange={(e) => setRemark(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-6" placeholder="พิมพ์ข้อสังเกต..."></textarea>
+               <div className="flex items-center justify-between p-4 bg-slate-800 rounded-xl text-white mb-6">
+                  <span className="text-lg">รวมคะแนนทั้งหมด</span>
+                  <div className="text-3xl font-bold">{totalScore} <span className="text-lg font-normal text-slate-300">/ 100</span></div>
+               </div>
+               <button type="submit" disabled={!isValid || isSubmitting} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-700 disabled:bg-slate-300 transition-colors shadow-sm flex justify-center items-center gap-2">
+                  {isSubmitting ? <span className="loader"></span> : 'บันทึกคะแนน'}
+               </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    // --- PRINT & EXPORT COMPONENT ---
+    function PrintableScoreSheet({ data, onClose }) {
+      
+      const handleExportExcel = () => {
+        const table = document.getElementById('summary-table');
+        const wb = XLSX.utils.table_to_book(table, {sheet: "Summary"});
+        XLSX.writeFile(wb, `สรุปผลภาพรวม_${data.sessionName}_กลุ่ม${data.group}.xlsx`);
+      };
+
+      const handleExportWord = () => {
+        const header = `
+          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+          <head>
+            <meta charset='utf-8'>
+            <title>ตารางให้คะแนน</title>
+            <style>
+              @page WordSection1 {
+                size: 841.9pt 595.3pt; /* A4 Landscape */
+                mso-page-orientation: landscape;
+                margin: 0.5in;
+              }
+              div.WordSection1 { page: WordSection1; }
+              body, table, td, th, div, span { font-family: 'Sarabun', 'TH SarabunPSK', sans-serif !important; }
+              table { border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 14px; }
+              th, td { border: 1px solid black; padding: 5px; text-align: center; }
+              .text-left { text-align: left !important; }
+              .font-bold { font-weight: bold; }
+              .header-text { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 15px; }
+            </style>
+          </head>
+          <body>
+            <div class="WordSection1">
+        `;
+        const footer = "</div></body></html>";
+        const content = document.getElementById('printable-area').innerHTML;
+        const html = header + content + footer;
+        
+        const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ตารางให้คะแนน_${data.invSlot}_กลุ่ม${data.group}.doc`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      // 1. โหมดพิมพ์สรุปภาพรวม (Admin)
+      if (data.type === 'summary') {
+        return (
+          <div className="min-h-screen bg-white text-black font-sans print-show">
+            <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
+            
+            <div className="print-hide bg-indigo-900 p-4 flex justify-between items-center fixed top-0 w-full shadow-lg z-50 text-white">
+              <div className="font-semibold flex items-center gap-2"><Icons.Printer /> โหมดพิมพ์สรุปภาพรวม</div>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">ปิด / กลับ</button>
+                <button onClick={handleExportExcel} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                  <Icons.Download /> ออกเป็น Excel
+                </button>
+                <button onClick={() => window.print()} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                  <Icons.Printer /> สั่งพิมพ์
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-24 print:pt-4 pb-16 px-8 max-w-[1000px] mx-auto print:px-0">
+              <div className="text-center font-bold mb-6 text-[18px] leading-relaxed">
+                <div>ตารางสรุปผลการประเมินภาพรวม การสอบสัมภาษณ์เพื่อประเมินทักษะและทัศนคติทางสังคมสงเคราะห์</div>
+                <div>ลำดับที่ {data.sessionName} (ครั้งที่ {data.examInfo.round}/{data.examInfo.year})</div>
+                <div className="text-[16px] font-normal mt-1">กลุ่มสอบ: {data.group} | วันสอบ: {formatDateSafe(data.examInfo.date)}</div>
+              </div>
+
+              <table id="summary-table" className="w-full border-collapse border border-black text-[15px] text-center mb-8">
+                <thead>
+                  <tr className="bg-slate-100 print:bg-transparent">
+                    <th className="border border-black p-3 w-[8%] font-bold">ที่</th>
+                    {data.group === 'ทั้งหมด' && <th className="border border-black p-3 w-[10%] font-bold">กลุ่ม</th>}
+                    <th className="border border-black p-3 font-bold text-left">รายชื่อผู้สอบ</th>
+                    <th className="border border-black p-3 w-[12%] font-bold">คะแนน ก.1</th>
+                    <th className="border border-black p-3 w-[12%] font-bold">คะแนน ก.2</th>
+                    <th className="border border-black p-3 w-[15%] font-bold">คะแนนเฉลี่ย</th>
+                    <th className="border border-black p-3 w-[18%] font-bold">ผลการประเมิน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.candidates.length > 0 ? data.candidates.map((c, idx) => (
+                    <tr key={c.id}>
+                      <td className="border border-black p-3">{idx + 1}</td>
+                      {data.group === 'ทั้งหมด' && <td className="border border-black p-3">{c.groupId}</td>}
+                      <td className="border border-black p-3 text-left">{c.title}{c.name}</td>
+                      <td className="border border-black p-3">{c.s1 != null && c.s1 !== '' ? c.s1 : '-'}</td>
+                      <td className="border border-black p-3">{c.s2 != null && c.s2 !== '' ? c.s2 : '-'}</td>
+                      <td className="border border-black p-3 font-bold">{c.average != null && c.average !== '' ? Number(c.average).toFixed(2) : '-'}</td>
+                      <td className="border border-black p-3 font-bold">{c.status}</td>
+                    </tr>
+                  )) : <tr><td colSpan={data.group === 'ทั้งหมด' ? 7 : 6} className="border border-black p-6 text-center text-slate-500">ไม่มีข้อมูล</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+
+      // 2. โหมดพิมพ์ตารางให้คะแนนกรรมการ (แนวนอน)
+      return (
+        <div className="min-h-screen bg-white text-black font-sans print-show">
+          <style>{`@media print { @page { size: A4 landscape; margin: 15mm; } }`}</style>
+          
+          <div className="print-hide bg-slate-800 p-4 flex justify-between items-center fixed top-0 w-full shadow-lg z-50 text-white">
+            <div className="font-semibold flex items-center gap-2"><Icons.Printer /> โหมดพิมพ์ตารางให้คะแนน ({data.invSlot === 'inv1' ? 'กรรมการ 1' : 'กรรมการ 2'})</div>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium">ปิด / กลับ</button>
+              <button onClick={handleExportWord} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                <Icons.Download /> ออกเป็น Word
+              </button>
+              <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium flex items-center gap-2">
+                <Icons.Printer /> สั่งพิมพ์
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-24 print:pt-4 pb-16 px-8 max-w-[1100px] mx-auto print:px-0 print:max-w-none">
+            
+            <div id="printable-area">
+              <div className="text-center font-bold mb-6 text-[16px] leading-relaxed header-text">
+                <div>ตารางให้คะแนนของกรรมการ การสอบสัมภาษณ์เพื่อประเมินทักษะและทัศนคติทางสังคมสงเคราะห์ ลำดับที่ {data.sessionName} (ครั้งที่ {data.examInfo.round}/{data.examInfo.year})</div>
+                <div>กลุ่มที่ {data.group} วันสอบ {formatDateSafe(data.examInfo.date)} เวลาสอบ {data.examInfo.time}</div>
+              </div>
+
+              <table className="w-full border-collapse border border-black text-[14px] text-center mb-8">
+                <thead>
+                  <tr>
+                    <th rowSpan={2} className="border border-black p-2 w-[5%] font-bold">ที่</th>
+                    <th rowSpan={2} className="border border-black p-2 w-[20%] font-bold">รายชื่อผู้สอบ</th>
+                    <th colSpan={4} className="border border-black p-2 font-bold bg-slate-50 print:bg-transparent">เกณฑ์การพิจารณาให้คะแนน</th>
+                    <th rowSpan={2} className="border border-black p-2 w-[10%] font-bold">รวมคะแนนทั้งหมด</th>
+                    <th rowSpan={2} className="border border-black p-2 w-[15%] font-bold">ข้อสังเกตจากกรรมการ</th>
+                  </tr>
+                  <tr className="bg-slate-50 print:bg-transparent">
+                    <th className="border border-black p-2 font-normal w-[12.5%] text-[13px]">1. ทักษะทางสังคมสงเคราะห์ในการปฏิบัติงาน<br/>(30 คะแนน)</th>
+                    <th className="border border-black p-2 font-normal w-[12.5%] text-[13px]">2. ทัศนคติทางสังคมสงเคราะห์<br/>(30 คะแนน)</th>
+                    <th className="border border-black p-2 font-normal w-[12.5%] text-[13px]">3. การเขียน<br/>(20 คะแนน)</th>
+                    <th className="border border-black p-2 font-normal w-[12.5%] text-[13px]">4. การนำเสนอ<br/>(20 คะแนน)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.candidates.length > 0 ? data.candidates.map((c, idx) => {
+                    const score = c.scores?.[data.invSlot];
+                    const remark = c.remarks?.[data.invSlot];
+                    return (
+                      <tr key={c.id}>
+                        <td className="border border-black p-2">{idx + 1}</td>
+                        <td className="border border-black p-2 text-left">{c.title}{c.name}</td>
+                        <td className="border border-black p-2">{score?.skill != null ? score.skill : ''}</td>
+                        <td className="border border-black p-2">{score?.attitude != null ? score.attitude : ''}</td>
+                        <td className="border border-black p-2">{score?.writing != null ? score.writing : ''}</td>
+                        <td className="border border-black p-2">{score?.presentation != null ? score.presentation : ''}</td>
+                        <td className="border border-black p-2 font-bold">{score?.total != null ? score.total : ''}</td>
+                        <td className="border border-black p-2 text-left text-[12px]">{remark || ''}</td>
+                      </tr>
+                    )
+                  }) : <tr><td colSpan={8} className="border border-black p-6 text-center text-slate-500">ไม่มีรายชื่อผู้เข้าสอบ</td></tr>}
+                  
+                  {data.candidates.length < 8 && Array.from({ length: Math.max(0, 8 - data.candidates.length) }).map((_, i) => (
+                    <tr key={`blank-${i}`}>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                      <td className="border border-black p-3.5">{"\u00A0"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="mb-12 text-[14px]">
+                <div className="mb-6 leading-relaxed">
+                  ข้อเสนอแนะเพิ่มเติม .........................................................................................................................................................................................................................................<br/><br/>
+                  ...........................................................................................................................................................................................................................................................................<br/><br/>
+                  ...........................................................................................................................................................................................................................................................................
+                </div>
+              </div>
+
+              <div className="flex justify-end text-[15px] mr-12 mt-16 pb-4">
+                <div className="text-center w-80">
+                  <div className="mb-4 text-left pl-6">ลงนามกรรมการ ........................................................... </div>
+                  <div>({data.interviewerName || '...........................................................'})</div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      );
+    }
+
+    // Render React App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
 </html>
