@@ -155,17 +155,17 @@
     };
 
     const RANGES_20 = {
-      excellent: { min: 15, max: 20, label: 'ดีมาก', c: 'green' },
-      good: { min: 7, max: 14, label: 'ดี', c: 'amber' },
-      fair: { min: 0, max: 6, label: 'พอใช้', c: 'red' }
+      excellent: { min: 16, max: 20, label: 'ดีมาก', c: 'green' },
+      good: { min: 11, max: 15, label: 'ดี', c: 'amber' },
+      fair: { min: 0, max: 10, label: 'พอใช้', c: 'red' }
     };
 
     const getLevelFromScore20 = (score) => {
       if (score === '' || score === null || score === undefined) return '';
       const num = Number(score);
-      if (num >= 15 && num <= 20) return 'excellent';
-      if (num >= 7 && num <= 14) return 'good';
-      if (num >= 0 && num <= 6) return 'fair';
+      if (num >= 16 && num <= 20) return 'excellent';
+      if (num >= 11 && num <= 15) return 'good';
+      if (num >= 0 && num <= 10) return 'fair';
       return '';
     };
 
@@ -1472,9 +1472,9 @@
                   const isSelected = skillLevel === key;
                   const style = getOptionStyle(isSelected, info.c);
                   let desc = '';
-                  if(key==='excellent') desc = '> 3 ทักษะ';
-                  if(key==='good') desc = '2-3 ทักษะ';
-                  if(key==='fair') desc = '1 ทักษะ';
+                  if(key==='excellent') desc = '> 4 ด้าน';
+                  if(key==='good') desc = '3-4 ด้าน';
+                  if(key==='fair') desc = '1-2 ด้าน';
                   return (
                     <label key={key} className={`border rounded-lg p-4 cursor-pointer transition-all ${style.container}`}>
                       <div className="flex justify-between mb-1">
