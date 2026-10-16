@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบให้คะแนนสอบสัมภาษณ์</title><link rel="icon" type="image/png" href="https://img5.pic.in.th/file/secure-sv1/11zon_croppedd1b500c8230d553c.png">
+  <title>ระบบให้คะแนนสอบสัมภาษณ์</title>
+  <link rel="icon" type="image/png" href="https://img5.pic.in.th/file/secure-sv1/11zon_croppedd1b500c8230d553c.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
@@ -1551,7 +1552,7 @@
                         <span className={`font-semibold ${style.text}`}>{info.label}</span>
                         <input type="radio" name="writingLevel" checked={isSelected} onChange={() => { setWritingLevel(key); setScores({...scores, writing: ''}); }} className={`w-4 h-4 ${style.radio}`} />
                       </div>
-                      <div className={`text-xs ${style.desc}`}>{info.min}-{info.max} คะแนน</div>
+                      <div className={`text-lg font-bold ${style.score}`}>{info.min}-{info.max} คะแนน</div>
                     </label>
                   );
                 })}
@@ -1583,7 +1584,7 @@
                         <span className={`font-semibold ${style.text}`}>{info.label}</span>
                         <input type="radio" name="presentationLevel" checked={isSelected} onChange={() => { setPresentationLevel(key); setScores({...scores, presentation: ''}); }} className={`w-4 h-4 ${style.radio}`} />
                       </div>
-                      <div className={`text-xs ${style.desc}`}>{info.min}-{info.max} คะแนน</div>
+                      <div className={`text-lg font-bold ${style.score}`}>{info.min}-{info.max} คะแนน</div>
                     </label>
                   );
                 })}
