@@ -204,13 +204,47 @@
       }
     }
 
+    // --- ยืนยัน + ตั้ง/ยกเลิกสถานะ "ไม่เข้าสอบ" (ใช้ร่วมกันระหว่างกรรมการและแอดมิน) ---
+    // doCall(newAbsent) ต้องคืน Promise ของผลลัพธ์จาก server ({ success, candidate?, message? })
+    // คืนค่า res เมื่อสำเร็จ, คืน null เมื่อผู้ใช้กดยกเลิก
+    async function confirmToggleAbsent(candidate, newAbsent, doCall) {
+      const fullName = `${candidate.title || ''}${candidate.name || ''}`;
+      const hasScore = !!(candidate.scores && (candidate.scores.inv1 || candidate.scores.inv2));
+      const html = newAbsent
+        ? `ระบุว่า <b>${fullName}</b> ไม่เข้าสอบ<br/><span style="font-size:0.9em;color:#64748b">จะไม่ถูกนับเป็นผ่าน/ไม่ผ่าน และไม่สามารถให้คะแนนได้จนกว่าจะยกเลิกสถานะนี้` +
+          (hasScore ? `<br/>คะแนนที่เคยบันทึกไว้จะไม่ถูกลบ และกลับมาใช้ได้เมื่อยกเลิกสถานะ` : '') + `</span>`
+        : `ยกเลิกสถานะ "ไม่เข้าสอบ" ของ <b>${fullName}</b> ?<br/><span style="font-size:0.9em;color:#64748b">กลับไปอยู่ในสถานะรอประเมินตามปกติ</span>`;
+      const result = await Swal.fire({
+        icon: newAbsent ? 'warning' : 'question',
+        title: newAbsent ? 'ยืนยัน "ไม่เข้าสอบ"?' : 'ยกเลิกสถานะไม่เข้าสอบ?',
+        html,
+        showCancelButton: true,
+        confirmButtonText: newAbsent ? 'ยืนยัน ไม่เข้าสอบ' : 'ยกเลิกสถานะ',
+        cancelButtonText: 'ปิด',
+        confirmButtonColor: newAbsent ? '#e11d48' : '#2563eb',
+        showLoaderOnConfirm: true,
+        allowOutsideClick: () => !Swal.isLoading(),
+        preConfirm: async () => {
+          const res = await doCall(newAbsent);
+          if (!res || !res.success) {
+            Swal.showValidationMessage((res && res.message) || 'บันทึกสถานะไม่สำเร็จ');
+            return false;
+          }
+          return res;
+        }
+      });
+      return result.isConfirmed ? result.value : null;
+    }
+
     function getSessionStats(candidates) {
       const total = candidates.length;
       let passed = 0;
       let failed = 0;
       let pending = 0;
+      let absent = 0;
 
       candidates.forEach(c => {
+         if (c.absent) { absent++; return; } // ไม่เข้าสอบ: ไม่นับเป็นผ่าน/ไม่ผ่าน/รอประเมิน
          const s1 = c.scores?.inv1?.total;
          const s2 = c.scores?.inv2?.total;
          if (s1 != null && s2 != null) {
@@ -221,10 +255,12 @@
          }
       });
 
-      const passedPct = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
-      const failedPct = total > 0 ? ((failed / total) * 100).toFixed(1) : 0;
+      // เปอร์เซ็นต์คิดจาก "ผู้ที่เข้าสอบจริง" (ไม่รวมคนที่ไม่เข้าสอบ)
+      const attended = total - absent;
+      const passedPct = attended > 0 ? ((passed / attended) * 100).toFixed(1) : 0;
+      const failedPct = attended > 0 ? ((failed / attended) * 100).toFixed(1) : 0;
 
-      return { total, passed, failed, pending, passedPct, failedPct };
+      return { total, passed, failed, pending, absent, attended, passedPct, failedPct };
     }
 
     function App() {
@@ -296,6 +332,15 @@
         return "บันทึกคะแนนและซิงค์ลง Sheet สำเร็จ";
       };
 
+      const handleToggleAbsent = async (candidate, newAbsent) => {
+        const res = await confirmToggleAbsent(candidate, newAbsent, (a) =>
+          callServer('setCandidateAbsent', currentUser.token, currentUser.sessionId, currentUser.groupId, candidate.id, a));
+        if (!res) return;
+        const updated = res.candidate || { ...candidate, absent: newAbsent };
+        setSessions(prev => prev.map(s => s.id !== currentUser.sessionId ? s : { ...s, candidates: s.candidates.map(c => c.id === candidate.id ? { ...c, ...updated } : c) }));
+        Swal.fire({ icon: 'success', title: newAbsent ? 'บันทึก "ไม่เข้าสอบ" แล้ว' : 'ยกเลิกสถานะแล้ว', timer: 1400, showConfirmButton: false });
+      };
+
       if (isFetching) {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
@@ -357,6 +402,7 @@
                 candidates={activeSession.candidates.filter(c => c.groupId === currentUser.groupId)} 
                 user={currentUser} examInfo={activeSession.examInfo}
                 onSelectCandidate={setSelectedCandidate} onPrint={setPrintData}
+                onToggleAbsent={handleToggleAbsent}
               />
             )}
           </div>
@@ -674,11 +720,13 @@
           acc.passed += stats.passed;
           acc.failed += stats.failed;
           acc.pending += stats.pending;
+          acc.absent += stats.absent;
           return acc;
-        }, { total: 0, passed: 0, failed: 0, pending: 0 });
+        }, { total: 0, passed: 0, failed: 0, pending: 0, absent: 0 });
 
-        allStats.passedPct = allStats.total > 0 ? ((allStats.passed / allStats.total) * 100).toFixed(1) : 0;
-        allStats.failedPct = allStats.total > 0 ? ((allStats.failed / allStats.total) * 100).toFixed(1) : 0;
+        const allAttended = allStats.total - allStats.absent;
+        allStats.passedPct = allAttended > 0 ? ((allStats.passed / allAttended) * 100).toFixed(1) : 0;
+        allStats.failedPct = allAttended > 0 ? ((allStats.failed / allAttended) * 100).toFixed(1) : 0;
 
         return (
           <div className="space-y-6 mt-2">
@@ -694,6 +742,7 @@
                 <div>
                   <p className="text-xs text-slate-500 font-bold mb-1">ผู้เข้าสอบทั้งหมด (สะสม)</p>
                   <h3 className="text-2xl font-black text-slate-800">{allStats.total} <span className="text-sm font-normal text-slate-500">คน</span></h3>
+                  {allStats.absent > 0 && <p className="text-xs text-slate-400 mt-0.5">ไม่เข้าสอบ {allStats.absent} คน</p>}
                 </div>
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-full"><Icons.Users className="w-6 h-6"/></div>
               </div>
@@ -753,6 +802,7 @@
                       <div className="bg-slate-50 p-2 rounded-lg text-center border border-slate-100">
                         <div className="text-[11px] text-slate-500 mb-0.5 font-bold">ทั้งหมด</div>
                         <div className="text-base font-bold text-slate-700">{stats.total} <span className="text-[10px] font-normal text-slate-400">คน</span></div>
+                        {stats.absent > 0 && <div className="text-[10px] text-slate-400">ไม่เข้าสอบ {stats.absent}</div>}
                       </div>
                       <div className="bg-green-50 p-2 rounded-lg text-center border border-green-100">
                         <div className="text-[11px] text-green-600 mb-0.5 font-bold">ผ่าน</div>
@@ -819,6 +869,9 @@
         }
 
         return filtered.map(c => {
+          if (c.absent) {
+            return { ...c, s1: null, s2: null, average: null, status: 'ไม่เข้าสอบ', statusColor: 'bg-rose-100 text-rose-700' };
+          }
           const s1 = c.scores.inv1?.total;
           const s2 = c.scores.inv2?.total;
           let average = null;
@@ -879,6 +932,7 @@
                   <div>
                     <p className="text-xs text-slate-500 font-bold mb-1">ผู้เข้าสอบทั้งหมด</p>
                     <h3 className="text-2xl font-black text-slate-800">{stats.total} <span className="text-sm font-normal text-slate-500">คน</span></h3>
+                    {stats.absent > 0 && <p className="text-xs text-slate-400 mt-0.5">ไม่เข้าสอบ {stats.absent} คน</p>}
                   </div>
                   <div className="p-3 bg-blue-50 text-blue-600 rounded-full"><Icons.Users className="w-6 h-6"/></div>
                 </div>
@@ -1011,6 +1065,13 @@
         }
         setCandidates([...candidates, cAdded]);
         setNewCandidate({ ...newCandidate, name: '' });
+      };
+
+      const handleToggleAbsentAdmin = async (c, newAbsent) => {
+        const res = await confirmToggleAbsent(c, newAbsent, (a) => callServer('setCandidateAbsent', token, session.id, c.groupId, c.id, a));
+        if (!res) return;
+        const updated = res.candidate || { ...c, absent: newAbsent };
+        setCandidates(candidates.map(item => item.id === c.id ? { ...item, ...updated } : item));
       };
 
       const handleDeleteCandidate = (c) => {
@@ -1287,15 +1348,21 @@
                     <tr className="bg-white border-b border-slate-100">
                       <th className="p-4 font-semibold text-slate-500 text-sm w-32">เวลาสอบ</th>
                       <th className="p-4 font-semibold text-slate-500 text-sm">ชื่อ-สกุล</th>
-                      <th className="p-4 font-semibold text-slate-500 text-sm text-center w-24">จัดการ</th>
+                      <th className="p-4 font-semibold text-slate-500 text-sm text-center w-48">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {groupCandidates.map(c => (
                       <tr key={c.id} className="hover:bg-slate-50">
                         <td className="p-4 text-sm text-slate-600">{c.time}</td>
-                        <td className="p-4 text-sm font-medium text-slate-800">{c.title}{c.name}</td>
-                        <td className="p-4 text-center">
+                        <td className={`p-4 text-sm font-medium ${c.absent ? 'text-slate-400' : 'text-slate-800'}`}>
+                          <span className={c.absent ? 'line-through' : ''}>{c.title}{c.name}</span>
+                          {c.absent && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 no-underline">ไม่เข้าสอบ</span>}
+                        </td>
+                        <td className="p-4 text-center whitespace-nowrap">
+                          <button onClick={() => handleToggleAbsentAdmin(c, !c.absent)} className={`mr-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${c.absent ? 'border-slate-300 text-slate-600 hover:bg-slate-100' : 'border-rose-200 text-rose-600 hover:bg-rose-50'}`} title={c.absent ? 'ยกเลิกสถานะไม่เข้าสอบ' : 'ระบุว่าไม่เข้าสอบ'}>
+                            {c.absent ? 'ยกเลิกไม่เข้าสอบ' : 'ไม่เข้าสอบ'}
+                          </button>
                           <button onClick={() => handleDeleteCandidate(c)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded" title="ลบรายชื่อ">
                             <Icons.Trash />
                           </button>
@@ -1313,7 +1380,7 @@
     }
 
     // --- INTERVIEWER DASHBOARD ---
-    function InterviewerDashboard({ session, candidates, user, examInfo, onSelectCandidate, onPrint }) {
+    function InterviewerDashboard({ session, candidates, user, examInfo, onSelectCandidate, onPrint, onToggleAbsent }) {
       return (
         <div className="space-y-6 mt-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1349,14 +1416,19 @@
                   {candidates.map(candidate => {
                     const myScore = candidate.scores[user.invSlot];
                     const isEvaluated = myScore !== null;
+                    const isAbsent = candidate.absent === true;
                     return (
-                      <tr key={candidate.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={candidate.id} className={`transition-colors ${isAbsent ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50'}`}>
                         <td className="p-4 text-sm font-medium text-slate-700">
                           <div className="flex items-center gap-2 text-slate-500"><Icons.Clock />{candidate.time}</div>
                         </td>
-                        <td className="p-4 text-sm font-medium text-slate-800">{candidate.title}{candidate.name}</td>
+                        <td className={`p-4 text-sm font-medium ${isAbsent ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{candidate.title}{candidate.name}</td>
                         <td className="p-4 text-center">
-                          {isEvaluated ? (
+                          {isAbsent ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                              <Icons.XBadge className="w-4 h-4" /> ไม่เข้าสอบ
+                            </span>
+                          ) : isEvaluated ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
                               <Icons.CheckCircle /> ประเมินแล้ว ({myScore.total})
                             </span>
@@ -1365,9 +1437,22 @@
                           )}
                         </td>
                         <td className="p-4 text-center">
-                          <button onClick={() => onSelectCandidate(candidate)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm ${isEvaluated ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-                            {isEvaluated ? 'ดู/แก้ไขคะแนน' : 'ให้คะแนน'}
-                          </button>
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            {isAbsent ? (
+                              <button onClick={() => onToggleAbsent(candidate, false)} className="px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm bg-white border border-slate-300 text-slate-600 hover:bg-slate-100">
+                                ยกเลิกสถานะไม่เข้าสอบ
+                              </button>
+                            ) : (
+                              <>
+                                <button onClick={() => onSelectCandidate(candidate)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm ${isEvaluated ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                                  {isEvaluated ? 'ดู/แก้ไขคะแนน' : 'ให้คะแนน'}
+                                </button>
+                                <button onClick={() => onToggleAbsent(candidate, true)} className="px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-rose-200 text-rose-600 hover:bg-rose-50" title="ระบุว่าผู้เข้าสอบรายนี้ไม่เข้าสอบ">
+                                  ไม่เข้าสอบ
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1764,6 +1849,16 @@
                   {data.candidates.length > 0 ? data.candidates.map((c, idx) => {
                     const score = c.scores?.[data.invSlot];
                     const remark = c.remarks?.[data.invSlot];
+                    if (c.absent) {
+                      return (
+                        <tr key={c.id}>
+                          <td className="border border-black p-2">{idx + 1}</td>
+                          <td className="border border-black p-2 text-left">{c.title}{c.name}</td>
+                          <td colSpan={5} className="border border-black p-2 font-bold">ไม่เข้าสอบ</td>
+                          <td className="border border-black p-2 text-left text-[12px]">{remark || ''}</td>
+                        </tr>
+                      );
+                    }
                     return (
                       <tr key={c.id}>
                         <td className="border border-black p-2">{idx + 1}</td>
